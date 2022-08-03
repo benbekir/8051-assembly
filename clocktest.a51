@@ -10,13 +10,13 @@ Timer 0:    ; Timer 0 Interrupt
 
 Initialisierung:
 orl TMOD, # 02h    ; Timer 0 im 8-Bit Autoreload-Modus. 
-; Die Überlauffrequenz des Timer 0 beträgt 4000 Hz, die Periodendauer 0,25 ms.
+; Die ï¿½berlauffrequenz des Timer 0 betrï¿½gt 4000 Hz, die Periodendauer 0,25 ms.
 mov TH0, # 06h    ; Reloadwert
 
 ; Interrupts
 setb ET0    ; Timer 0 Interrupt freigeben
 setb EA    ; globale Interruptfreigabe
-setb TR0    ; Timer 0 läuft.
+setb TR0    ; Timer 0 lï¿½uft.
 
 ; Variables
 mov 36h, #0Fh  ; use two registers to create 4000d

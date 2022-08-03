@@ -1,4 +1,4 @@
-; MCS51 Assembler Version 4.1.4 vom 10. 08. 03, A. Roth Controllertechnik, 26. Juli 2022
+; MCS51 Assembler Version 4.1.4 vom 10. 08. 03, A. Roth Controllertechnik, 3/ August 2022
 				1:1	; 25.07.2022 13:31:55
 				1:2	
 				1:3	#cpu = 89S8252    ; @12 MHz
@@ -11,13 +11,13 @@
 				1:10	
 000D				1:11	Initialisierung:
 000D	43	89	02	1:12	orl TMOD, # 02h    ; Timer 0 im 8-Bit Autoreload-Modus. 
-				1:13	; Die Überlauffrequenz des Timer 0 beträgt 4000 Hz, die Periodendauer 0,25 ms.
+				1:13	; Die ï¿½berlauffrequenz des Timer 0 betrï¿½gt 4000 Hz, die Periodendauer 0,25 ms.
 0010	75	8C	06	1:14	mov TH0, # 06h    ; Reloadwert
 				1:15	
 				1:16	; Interrupts
 0013	D2	A9		1:17	setb ET0    ; Timer 0 Interrupt freigeben
 0015	D2	AF		1:18	setb EA    ; globale Interruptfreigabe
-0017	D2	8C		1:19	setb TR0    ; Timer 0 läuft.
+0017	D2	8C		1:19	setb TR0    ; Timer 0 lï¿½uft.
 				1:20	
 				1:21	; Variables
 0019	75	36	0F	1:22	mov 36h, #0Fh  ; use two registers to create 4000d
@@ -52,32 +52,32 @@
 0049	22			1:51	ret
 				1:52	
 004A				1:53	Inc Seconds:
-004A	D5	35	0B	1:54	    djnz 35h, 58h; TODO skip to inc 
+004A	D5	35	0B	1:54	    djnz 35h, 58h ; TODO skip to inc 
 004D	12	00	5B	1:55	    lcall Inc Minutes
 0050	75	35	3D	1:56	    mov 35h, #61d
 0053	75	32	00	1:57	    mov 32h, #0
-0056	01	5A		1:58	    ajmp 5Ah; TODO jump to ret
+0056	01	5A		1:58	    ajmp 5Ah ; TODO jump to ret
 0058	05	32		1:59	    inc 32h
 005A	22			1:60	ret
 				1:61	
 005B				1:62	Inc Minutes:
-005B	D5	34	0B	1:63	    djnz 34h, 69h; TODO skip to inc 
+005B	D5	34	0B	1:63	    djnz 34h, 69h ; TODO skip to inc
 005E	12	00	6C	1:64	    lcall Inc Hours
 0061	75	34	3D	1:65	    mov 34h, #61d
 0064	75	31	00	1:66	    mov 31h, #0
-0067	01	6B		1:67	    ajmp 6Bh; TODO jump to ret
+0067	01	6B		1:67	    ajmp 6Bh ; TODO jump to ret
 0069	05	31		1:68	    inc 31h
 006B	22			1:69	ret
 				1:70	
 006C				1:71	Inc Hours:
-006C	D5	33	08	1:72	    djnz 33h, 77h; TODO skip to inc 
+006C	D5	33	08	1:72	    djnz 33h, 77h ; TODO skip to inc 
 006F	75	33	19	1:73	    mov 33h, #25d
 0072	75	30	00	1:74	    mov 30h, #0
-0075	01	79		1:75	    ajmp 79h; TODO jump to ret
+0075	01	79		1:75	    ajmp 79h ; TODO jump to ret
 0077	05	30		1:76	    inc 30h
 0079	22			1:77	ret
 
- 77 Zeilen übersetzt. Code Ende bei 007Ah.
+ 77 Zeilen Ã¼bersetzt. Code Ende bei 007Ah.
  7 Labels:
 	Initialisierung: 000Dh
 	Timer 0 Interrupt: 0032h
