@@ -1,0 +1,5 @@
+- restwerte der division müssen bei der mittelwert-berechnung berücksichtigt werden
+- loop einführen für die mittelwert berechnung
+- tests
+- bei der tendenz evtl nicht mit einer division machen (weil teilen durch 0) sondern mit einer subtraktion und dann mit jump if carry
+- CLOCK manuell einstellen
