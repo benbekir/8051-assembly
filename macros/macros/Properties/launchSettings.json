@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "macros": {
+      "commandName": "Project",
+      "commandLineArgs": "clocktest.a51"
+    }
+  }
+}
