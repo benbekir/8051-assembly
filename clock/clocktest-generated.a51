@@ -46,6 +46,27 @@ Initialisierung:
 	mov r0, 3eh
 	mov @r0, #0h
 
+	; initialize _max_hours
+	mov DPTR, #_max_hours
+	lcall LoadVariable
+	pop 3eh
+	mov r0, 3eh
+	mov @r0, #23d
+
+	; initialize _max_minutes
+	mov DPTR, #_max_minutes
+	lcall LoadVariable
+	pop 3eh
+	mov r0, 3eh
+	mov @r0, #59d
+
+	; initialize _max_seconds
+	mov DPTR, #_max_seconds
+	lcall LoadVariable
+	pop 3eh
+	mov r0, 3eh
+	mov @r0, #59d
+
 	end
 ; * * * Hauptprogramm Ende * * *
 
@@ -62,8 +83,7 @@ OnTick:
 	; clock_ticks is 0 (a second has passed)
 	; ResetClockTicks is inlibable (no need to store stack frame)
 	lcall ResetClockTicks		; reset _clock_ticks to 4000
-	; IncrementSeconds is NOT inlibable (but don't need to preserve registers here)
-	lcall IncrementSeconds		; increment _seconds
+	lcall OnEachSecond 			; call OnEachSecond
 __OnTick_End:
 	; decrement _clock_ticks
 	mov DPTR, #_clock_ticks		; load clock_ticks** to dptr
@@ -71,63 +91,179 @@ __OnTick_End:
 	lcall DecrementWord			; decrement clock_ticks by 1
 	reti
 
+OnEachSecond:
+	mov A, P0					; load P0 to A
+	; check if P0 is 0
+	jnz __OnEachSecond_SetTime
+	; normal clock operation
+	; IncrementSeconds is NOT inlibable (but don't need to preserve registers here)
+	lcall IncrementSeconds		; increment _seconds
+	jmp __OnEachSecond_End
+	__OnEachSecond_SetTime:
+	; set time
+	clr C						; clear carry flag
+	rrc A						; rotate carry flag into A
+	; A is now 0 (increment mode) or 1 (decrement mode)
+	mov r1, A					; save A to r1
+	; check if P1 >= 3
+	mov r0, P1					; load P1 to r0
+	mov A, #2					; load 2 to A
+	clr C						; clear carry flag
+	subb A, r0					; 2 - P1 to A
+	; if carry flag is set, jump to OnEachSecond_End (invalid P1)
+	jc __OnEachSecond_End
+	; P1 is valid
+	mov DPTR, #_seconds			; load _seconds** to dptr
+	mov 3eh, r0			; load offset to 3eh
+	push 3eh				; push offset to stack
+	lcall LoadVariableWithOffset
+	; leave value* on stack
+	mov DPTR, #_max_seconds			; load _max_seconds** to dptr
+	mov 3eh, r0			; load offset to 3eh
+	push 3eh				; push offset to stack
+	lcall LoadVariableWithOffset
+	; leave max* on stack
+	mov A, r1					; restore MODE flag from B
+	; if MODE flag is 0 -> increment, 1 -> decrement
+	; A basically provides a nice offset here.
+	; -> use branch table to call the correct function 
+	; A = A * 8 to match offset in branch table
+	rl A						; shift
+	rl A						; shift
+	rl A						; shift
+	; load branch table to dptr
+	mov DPTR, #__OnEachSecond_BranchTable	
+	jmp @A+DPTR					; execute branch table entry and return
+	__OnEachSecond_End:
+	ret
+
+	; Branch table with 8 byte offsets :)
+	; BranchTable[0] = Increment
+	; BranchTable[1] = Decrement
+	__OnEachSecond_BranchTable:
+	lcall Increment				; 3 bytes
+	pop 3eh				; 2 byte
+	nop							; 1 byte
+	nop							; 1 byte
+	ret							; 1 byte
+	lcall Decrement				; this is __OnEachSecond_Increment + 8 :)
+	pop 3eh				; 2 byte
+	nop							; 1 byte
+	nop							; 1 byte
+	ret							; 1 byte
+
+; param[0] = void* variable to increment
+; param[1] = void* inclusive overflow value 
+; if the value reaches the inclusive overflow value (in params), it is reset to 0
+; expects single byte parameter passed via stack.
+; returns 0xff if overflow, 0 otherwise
+Increment:
+	pop 3eh				; pop our return address high byte
+	mov r7, 3eh			; load our return address high byte to r7
+	pop 3eh				; pop our return address low byte
+	mov r6, 3eh			; load our return address low byte to r6
+	pop 3eh				; pop our parameter (MAX_VALUE*)
+	mov r1, 3eh			; load MAX_VALUE* to r1
+	mov A, @r1					; dereference MAX_VALUE* to A
+	pop 3eh				; pop value* from stack
+	mov r0, 3eh			; load value* to r0
+	inc @r0						; increment value
+	; handle overflow
+	mov 3eh, #00h			; assume no overflow by default
+	clr C						; clear carry flag
+	subb A, @r0					; subtract: MAX - (value)
+	jnc __Increment_NoOverflow	; if no overflow, jump to Increment_NoOverflow
+	; overflow
+	mov @r0, #0					; reset value to 0
+	mov 3eh, #ffh			; set return value to 0xff
+	__Increment_NoOverflow:
+	push 3eh				; push return value to stack
+	mov 3eh, r6			; restore our return address low byte
+	push 3eh				; push return address low byte to stack
+	mov 3eh, r7			; restore our return address high byte
+	push 3eh				; push return address high byte to stack
+	ret
+
+; param[0] = variable to decrement
+; param[1] = inclusive MAX value 
+; if the value reaches 0, it is reset to 0 the maximum value < 255 (via params)
+; expects single byte parameter passed via stack.
+; returns 0xff if underflow, 0 otherwise
+Decrement:
+	pop 3eh				; pop our return address high byte
+	mov r7, 3eh			; load our return address high byte to r7
+	pop 3eh				; pop our return address low byte
+	mov r6, 3eh			; load our return address low byte to r6
+	pop 3eh				; pop our parameter (MAX_VALUE)
+	mov r1, 3eh			; load our parameter to r1
+	pop 3eh				; pop value* from stack
+	mov r0, 3eh			; load value* to r0
+	dec @r0						; decrement value
+	; handle underflow:
+	; if value is > MAX_VALUE, reset value to MAX_VALUE,
+	; also assume MAX_VALUE is != 0xFF
+	mov 3eh, #0h			; assume no underflow by default
+	clr C						; clear carry flag
+	mov A, @r1					; load MAX_VALUE to A
+	subb A, @r0					; subtract: MAX - (value)
+	jnc __Decrement_NoUnderflow	; if no underflow, jump to Decrement_Underflow
+	mov A, @r1 					; restore MAX_VALUE from r1
+	mov @r0, A					; reset value to MAX_VALUE
+	mov 3eh, #FFh			; set return value to 0xff
+	__Decrement_NoUnderflow:
+	push 3eh				; push return value to stack
+	mov 3eh, r6			; restore our return address low byte
+	push 3eh				; push return address low byte to stack
+	mov 3eh, r7			; restore our return address high byte
+	push 3eh				; push return address high byte to stack
+	ret
+
 IncrementSeconds:
 	; increment _seconds
 	mov DPTR, #_seconds			; load _seconds** to dptr
 	lcall LoadVariable
-	pop 3eh				; pop _seconds* from stack
-	mov r0, 3eh			; load _seconds* to r0
-	; check if _seconds is 59
-	mov A, #59d					; load 59 to A
-	xrl A, @r0					; compare _seconds with 59
-	jnz __IncrementSeconds_End	; if _seconds is not 59, jump to IncrementSeconds_End
-	; _seconds is 59
-	; reset _seconds to 0xFF (generate overflow to 0 in increment)
-	mov @r0, #FFh				; load 0xFF to _seconds
-	; increment _minutes
-	lcall SF_STORE
-	lcall IncrementMinutes
-	lcall SF_RESTORE
-__IncrementSeconds_End:
-	inc @r0						; increment _seconds
+	; leave value* on stack
+	mov DPTR, #_max_seconds		; load _max_seconds** to dptr
+	lcall LoadVariable
+	; leave max_seconds* on stack
+	lcall Increment				; call Increment
+	pop 3eh				; pop return value (overflow flag) from stack
+	mov A, 3eh			; load return value to A
+	; if no overflow, jump to IncrementSeconds_NoOverflow
+	jz __IncrementSeconds_NoOverflow
+	; overflow, so increment _minutes
+	lcall IncrementMinutes		; call IncrementMinutes
+	__IncrementSeconds_NoOverflow:
 	ret
 
 IncrementMinutes:
 	; increment _minutes
 	mov DPTR, #_minutes			; load _minutes** to dptr
 	lcall LoadVariable
-	pop 3eh				; pop _minutes* from stack
-	mov r0, 3eh			; load _minutes* to r0
-	; check if _minutes is 59
-	mov A, #59d					; load 59 to A
-	xrl A, @r0					; compare _minutes with 59
-	jnz __IncrementMinutes_End	; if _minutes is not 59, jump to IncrementMinutes_End
-	; _minutes is 59
-	; reset _minutes to 0xFF (generate overflow to 0 in increment)
-	mov @r0, #FFh				; load 0xFF to _minutes
-	; increment _hours 
-	lcall SF_STORE				; store stack frame
-	lcall IncrementHours
-	lcall SF_RESTORE			; restore stack frame
-__IncrementMinutes_End:
-	inc @r0						; increment _minutes
+	; leave value* on stack
+	mov DPTR, #_max_minutes		; load _max_minutes** to dptr
+	lcall LoadVariable
+	; leave max_minutes* on stack
+	lcall Increment				; call Increment
+	pop 3eh				; pop return value (overflow flag) from stack
+	mov A, 3eh			; load return value to A
+	; if no overflow, jump to IncrementMinutes_NoOverflow
+	jz __IncrementMinutes_NoOverflow
+	; overflow, so increment _hours
+	lcall IncrementHours		; call IncrementHours
+	__IncrementMinutes_NoOverflow:
 	ret
 
 IncrementHours:
 	; increment _hours
 	mov DPTR, #_hours			; load _hours** to dptr
-	lcall LoadVariable			
-	pop 3eh				; pop _hours* from stack
-	mov r0, 3eh			; load _hours* to r0
-	; check if _hours is 23
-	mov A, #23d					; load 23 to A
-	xrl A, @r0					; compare _hours with 23
-	jnz __IncrementHours_End	; if _hours is not 23, jump to IncrementHours_End
-	; _hours is 23
-	; reset _hours to 0xFF (generate overflow to 0 in increment)
-	mov @r0, #FFh				; load 0xFF to _hours
-__IncrementHours_End:
-	inc @r0						; increment _hours
+	lcall LoadVariable
+	; leave value* on stack
+	mov DPTR, #_max_hours		; load _max_hours** to dptr
+	lcall LoadVariable
+	; leave max_hours* on stack
+	lcall Increment				; call Increment
+	pop 3eh				; pop return value (overflow flag) from stack
 	ret
 
 ; INLINEABLE
@@ -189,6 +325,24 @@ LoadVariable:
 	push 3eh		; save variable address to stack
 	push 3dh	; push return address low byte on stack
 	mov 3eh, A	; load return address high byte to DIRECT
+	push 3eh		; restore full 16bit return address on stack
+	ret
+
+; loads the variable address provided in DPTR adding the offset provided via parameter 1
+; from memory and returns it on the stack
+; INLINEABLE -> we can't use r0 - r7 here 
+LoadVariableWithOffset:
+	pop 3dh		; save return address high byte to DIRECT_2
+	mov A, 3dh	; load return address high byte to A
+	mov B, A			; save return address high byte to B
+	pop 3dh		; save return address low byte to DIRECT_2 buffer
+	pop 3eh		; save offset to DIRECT buffer
+	mov A, 3eh	; load offset to A
+	movc A, @A+DPTR		; load variable address + offset from memory
+	mov 3eh, A	; load variable address + offset to DIRECT
+	push 3eh		; save variable address to stack
+	push 3dh	; push return address low byte on stack
+	mov 3eh, B	; load return address high byte to DIRECT
 	push 3eh		; restore full 16bit return address on stack
 	ret
 
@@ -314,11 +468,20 @@ __SF_RESTORE_RestoreContext:
 __SF_RESTORE_End:
 	ret
 
-_hours:
-	db 30h
-_minutes:
-	db 31h
+; DON't SWAP ORDERS OF THESE VARIABLES - START!
 _seconds:
 	db 32h
+_minutes:
+	db 31h
+_hours:
+	db 30h
+_max_seconds:
+	db 33h
+_max_minutes:
+	db 34h
+_max_hours:
+	db 35h
+; DON't SWAP ORDERS OF THESE VARIABLES - END!
+
 _clock_ticks:
-	db 33h ; 16 bit integer starting at RAM addr 0x33
+	db 36h ; 16 bit integer starting at RAM addr 0x36

@@ -1,15 +1,13 @@
 # Zeit stellen in der Clock
 
-Port 0 wählt zwischen Minuten, Stunden, Inkrementieren und dem Dekrementieren aus.
-Port 1  gibt an, ob das Stellen der Zeit ein oder ausgeschaltet ist.
+- [ ] over + underflow handling
 
-|Port 0|Port 1|Resultat|
-| --- | --- | --- |
-|00|00|Nichts|
-|01|00|Nichts|
-|10|00|Nichts|
-|11|00|Nichts|
-|00|!=0|Minuten werden inkrementiert|
-|01|!=0|Minuten werden dekrementiert|
-|10|!=0|Stunden werden inkrementiert|
-|11|!=0|Stunden werden dekrementiert|
+Port 0 Inkrementieren, Dekrementieren und normaler clock operation aus.
+Port 1 gibt an, welches element betroffen ist (Sekunden, Minuten, Stunden).
+
+|Port 0|Mode|Port 1|Resultat|
+| --- | --- | --- | --- |
+|00|Normal|00|Seconds|
+|01|Increment|01|Minutes|
+|10|Decrement|10|Hours|
+|11|Invalid|11|Invalid|
