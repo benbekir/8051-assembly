@@ -87,7 +87,9 @@ DoAfterTenSeconds:
 __DoAfterTenSeconds_End:
 	inc 4Bh
 	ret
-	
+
+; divide each integer stored in 40h-49h by 10 before summing them up in 4Ah
+; the rest value of each integer division is stored in 4Ch and divided by 10 in the end. the result is then added to 4Ah (TODO)
 CalculateAverage:
 	mov B, #10d
 	mov r1, #0
@@ -98,59 +100,69 @@ CalculateAverage:
 	mov A, 40h
 	div AB
 	mov B, #10
-	
 	add A, r1
+	
 	xch A, r1
 	mov A, 41h
-	mov B, #10	
 	div AB
+	mov B, #10
 	add A, r1
+	
 	xch A, r1
 	mov A, 42h
-	mov B, #10
 	div AB
+	mov B, #10
 	add A, r1
+	
 	xch A, r1
 	mov A, 43h
-	mov B, #10
 	div AB
+	mov B, #10
 	add A, r1
+	
 	xch A, r1
 	mov A, 44h
-	mov B, #10
 	div AB
+	mov B, #10
 	add A, r1
+	
 	xch A, r1
 	mov A, 45h
-	mov B, #10
 	div AB
+	mov B, #10
 	add A, r1
+	
 	xch A, r1
 	mov A, 46h
-	mov B, #10
 	div AB
+	mov B, #10
 	add A, r1
+	
 	xch A, r1
 	mov A, 47h
-	mov B, #10
 	div AB
+	mov B, #10
 	add A, r1
+	
 	xch A, r1
 	mov A, 48h
-	mov B, #10
 	div AB
+	mov B, #10
 	add A, r1
+	
 	xch A, r1
 	mov A, 49h
-	mov B, #10
 	div AB
+	mov B, #10
 	add A, r1
+	
 	mov DPTR, #_average
 	lcall LoadVariable
 	mov @r0, A
 	lcall CompareAverages
 	ret
 
+; compare the last average with the current one and predict whether the temperature will rise or fall
 CompareAverages:
 	mov A, 4Ah
 	mov B, r2

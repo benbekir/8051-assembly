@@ -1,5 +1,7 @@
 - restwerte der division müssen bei der mittelwert-berechnung berücksichtigt werden
-- loop einführen für die mittelwert berechnung
+- (loop einführen für die mittelwert berechnung)
 - tests
+- dokumentation
 - bei der tendenz evtl nicht mit einer division machen (weil teilen durch 0) sondern mit einer subtraktion und dann mit jump if carry
+- pointer herausnehmen (aus adresse 4Bh) falls man den nicht mehr benutzt und dann rest value summe in 4Bh verschieben
 - CLOCK manuell einstellen
