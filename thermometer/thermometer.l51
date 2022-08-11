@@ -1,0 +1,264 @@
+; MCS51 Assembler Version 4.1.4 vom 10. 08. 03, A. Roth Controllertechnik, 11. August 2022
+				1:1	; 09.08.2022 18:16:32
+				1:2	
+				1:3	#cpu = 89S8252	; @12 MHz
+				1:4	
+				1:5	#use LCALL
+				1:6	
+0000	01	0D		1:7	ajmp Initialisierung
+				1:8	
+000B				1:9	Timer 0:	; Timer 0 Interrupt
+000B	01	69		1:10		ajmp OnTick
+				1:11	
+000D				1:12	Initialisierung:
+000D	43	89	02	1:13	orl TMOD, # 02h	; Timer 0 im 8-Bit Autoreload-Modus. 
+				1:14	; Die Überlauffrequenz des Timer 0 beträgt 4000 Hz, die Periodendauer 0,25 ms.
+0010	75	8C	06	1:15	mov TH0, # 06h	; Reloadwert
+				1:16	
+				1:17	; Interrupts
+0013	D2	A9		1:18	setb ET0	; Timer 0 Interrupt freigeben
+0015	D2	AF		1:19	setb EA	; globale Interruptfreigabe
+0017	D2	8C		1:20	setb TR0 ;Timer 0 läuft
+				1:21	
+				1:22	; reset clock tick counter
+0019	12	00	F9	1:23	lcall ResetClockTicks
+				1:24	
+				1:25	;initialize_array
+001C	75	40	00	1:26	mov 40h, #0h
+001F	75	41	00	1:27	mov 41h, #0h
+0022	75	42	00	1:28	mov 42h, #0h
+0025	75	43	00	1:29	mov 43h, #0h
+0028	75	44	00	1:30	mov 44h, #0h
+002B	75	45	00	1:31	mov 45h, #0h
+002E	75	46	00	1:32	mov 46h, #0h
+0031	75	47	00	1:33	mov 47h, #0h
+0034	75	48	00	1:34	mov 48h, #0h
+0037	75	49	00	1:35	mov 49h, #0h
+				1:36	
+				1:37	;initialize_seconds
+003A	90	01	22	1:38	mov DPTR, #_seconds
+003D	12	01	1C	1:39	lcall LoadVariable
+0040	76	00		1:40	mov @r0, #0h
+				1:41	
+				1:42	;initialize_pointer
+0042	90	01	24	1:43	mov DPTR, #_pointer
+0045	12	01	1C	1:44	lcall LoadVariable
+0048	76	40		1:45	mov @r0, #40h
+				1:46	
+				1:47	;initialize_average
+004A	90	01	25	1:48	mov DPTR, #_average
+004D	12	01	1C	1:49	lcall LoadVariable
+0050	76	00		1:50	mov @r0, #0h
+				1:51	
+				1:52	;initialize_average_rest
+0052	90	01	26	1:53	mov DPTR, #_average_rest
+0055	12	01	1C	1:54	lcall LoadVariable
+0058	76	00		1:55	mov @r0, #0h
+				1:56	
+				1:57	;initialize_loop_variable
+005A	90	01	27	1:58	mov DPTR, #_loop_variable
+005D	12	01	1C	1:59	lcall LoadVariable
+0060	76	00		1:60	mov @r0, #0d
+				1:61	
+				1:62	;initialize_tendenz
+0062	75	4E	02	1:63	mov 4Eh, #2d
+				1:64	
+				1:65	;initialize_old_average
+0065	7D	00		1:66	mov r5, #0d
+				1:67	
+0067	80	FE		1:68	end
+				1:69	; * * * Hauptprogramm Ende * * *
+				1:70	
+0069				1:71	OnTick:
+				1:72		; check if _clock_ticks is 0
+0069	90	01	23	1:73		mov DPTR, #_clock_ticks		; load clock_ticks** to dptr
+006C	12	01	1C	1:74		lcall LoadVariable			; load clock_ticks* to r0
+006F	E6			1:75		mov A, @r0					; load clock_ticks low byte to A
+0070	08			1:76		inc r0						; increment clock_ticks* to target high byte
+0071	46			1:77		orl A, @r0					; Low byte OR high byte to A
+0072	70	06		1:78		jnz __OnTick_End			; if clock_ticks is not 0, jump to OnTick_End
+				1:79		; clock_ticks is 0 (a second has passed)
+				1:80		; reset _clock_ticks to 4000
+0074	12	00	F9	1:81		lcall ResetClockTicks
+				1:82		; increment _seconds
+0077	12	00	81	1:83		lcall DoAfterTenSeconds
+007A				1:84	__OnTick_End:
+				1:85		; decrement _clock_ticks
+007A	90	01	23	1:86		mov DPTR, #_clock_ticks		; load clock_ticks** to dptr
+007D	12	01	0F	1:87		lcall DecrementWord			; decrement clock_ticks by 1
+0080	32			1:88		reti
+				1:89		
+0081				1:90	DoAfterTenSeconds:
+				1:91		; logic for reading from P2 and writing to address that the _pointer is pointing to
+0081	90	01	24	1:92		mov DPTR, #_pointer
+0084	12	01	1C	1:93		lcall LoadVariable
+0087	E6			1:94		mov A, @r0
+0088	C9			1:95		xch A, r1
+0089	A7	A0		1:96		mov @r1, P2
+008B	12	00	A8	1:97		lcall CalculateAverage
+008E	90	01	24	1:98		mov DPTR, #_pointer
+0091	12	01	1C	1:99		lcall LoadVariable
+0094	74	49		1:100		mov A, #49h	
+0096	66			1:101		XRL A, @r0
+0097	70	03		1:102		jnz __DoAfterTenSeconds_End ; if _pointer is not pointing at RAM Address 49h, skip below logic
+				1:103		; logic when pointer was at last address (49h)
+0099	75	4B	3F	1:104		mov 4Bh, #3Fh
+009C				1:105	__DoAfterTenSeconds_End:
+009C	05	4B		1:106		inc 4Bh
+009E	22			1:107		ret
+				1:108		
+				1:109	; will load the current loop_variable value into r1
+				1:110	; we dont actually need to load value into r1, we can also use it from r0, however, that means that while using the loop_variable, we cannot use r0
+009F				1:111	LoadLoopVariable: 
+009F	90	01	27	1:112		mov DPTR, #_loop_variable
+00A2	12	01	1C	1:113		lcall LoadVariable ; r0 will now point at 4Dh
+00A5	E6			1:114		mov A, @r0 ; A will now point at 4Dh
+00A6	F9			1:115		mov r1, A
+00A7	22			1:116		ret
+				1:117		
+				1:118	
+				1:119	; divide each integer stored in 40h-49h by 10 before summing them up in 4Ah
+				1:120	; the rest value of each integer division is stored in 4Ch and divided by 10 in the end. the result is then added to 4Ah (TODO)
+00A8				1:121	CalculateAverage:
+				1:122		; clear variables before loop
+00A8	75	F0	0A	1:123		mov B, #10d
+00AB	79	00		1:124		mov r1, #0
+00AD	E4			1:125		clr A
+				1:126		
+				1:127		; Loop (A is empty, r4 has old average, B is #10d, r1 is empty)
+00AE	12	00	9F	1:128		lcall LoadLoopVariable ; loop_variable will now be in r1
+00B1	74	40		1:129		mov A, #40h
+00B3	29			1:130		add A, r1 ; A will now hold Address 40h + n (for (n = 0, n < 10, n++))
+00B4	C9			1:131		xch A, r1  
+00B5	E7			1:132		mov A, @r1
+00B6	84			1:133		div AB
+00B7	2D			1:134		add A, r5 
+00B8	FD			1:135		mov r5, A ; r5 holds currently accumulated average
+00B9	E5	F0		1:136		mov A, B
+00BB	25	4C		1:137		add A, 4Ch
+00BD	F5	4C		1:138		mov 4Ch, A
+				1:139		
+				1:140		; if #_loop_variable is at value #10d , end loop
+00BF	74	0A		1:141		mov A, #10d
+00C1	90	01	27	1:142		mov DPTR, #_loop_variable
+00C4	12	01	1C	1:143		lcall LoadVariable
+00C7	66			1:144		XRL A, @r0
+00C8	60	03		1:145		jz __CalculateAverage_End
+				1:146		; logic when address' are not equal
+00CA	06			1:147		inc @r0 ; increment loop variable by 1
+00CB	80	DB		1:148		sjmp CalculateAverage
+00CD				1:149	__CalculateAverage_End: 
+				1:150		; logic when address' are equal
+00CD	76	00		1:151		mov @r0, #0d		
+00CF	AC	4A		1:152		mov r4, 4Ah ; move old average to Address r4
+00D1	90	01	25	1:153		mov DPTR, #_average
+00D4	12	01	1C	1:154		lcall LoadVariable
+00D7	ED			1:155		mov A, r5 ; move currently accumulated average to Accumulator
+00D8	7D	00		1:156		mov r5, #0d
+00DA	F6			1:157		mov @r0, A 
+00DB	E5	4C		1:158		mov A, 4Ch
+00DD	75	4C	00	1:159		mov 4Ch, #0h
+00E0	75	F0	0A	1:160		mov B, #10d
+00E3	84			1:161		div AB
+00E4	26			1:162		add A, @r0
+00E5	F6			1:163		mov @r0, A
+00E6	12	00	EA	1:164		lcall CompareAverages
+00E9	22			1:165		ret
+				1:166	
+				1:167	; compare the last average with the current one and predict whether the temperature will rise or fall
+00EA				1:168	CompareAverages:
+00EA	E5	4A		1:169		mov A, 4Ah
+00EC	8C	F0		1:170		mov B, r4
+00EE	84			1:171		div AB
+00EF	60	04		1:172		jz __CompareAverages_Zero
+00F1	75	4E	01	1:173		mov 4Eh, #1d
+00F4	22			1:174		ret
+				1:175		; if value at RAM Address 4Eh is 0 => new average was lower than previous || 1 => new average was equal or greater than old average
+00F5				1:176	__CompareAverages_Zero:
+00F5	75	4E	00	1:177		mov 4Eh, #0d	
+00F8	22			1:178		ret
+				1:179		
+				1:180	; set clock ticks to 40000d
+00F9				1:181	ResetClockTicks:
+00F9	90	01	23	1:182		mov DPTR, #_clock_ticks
+00FC	7A	0F		1:183		mov r2, #0Fh
+00FE	7B	A0		1:184		mov r3, #A0h ; !!! Change this back !!!
+				1:185		;mov r2, #9Ch; high byte of target value 0x0FA0 (40000)
+				1:186		;mov r3, #40h; low byte of target value 0x0FA0 (40000)
+0100	12	01	04	1:187		lcall SetWord
+0103	22			1:188		ret
+				1:189		
+				1:190	; the address of target LE 16bit integer is stored in DPTR
+				1:191	; high byte of target value is stored in r2
+				1:192	; low byte of target value is stored in r3
+0104				1:193	SetWord:
+0104	12	01	1C	1:194		lcall LoadVariable		; load address of variable to r0
+0107	C9			1:195		xch A, r1				; save Acc to r1
+0108	EB			1:196		mov A, r3				; load low byte of target value to A
+0109	F6			1:197		mov @r0, A 				; save low byte of variable to r1
+010A	EA			1:198		mov A, r2				; load high byte of target value to A
+010B	08			1:199		inc r0					; increment r0 to high byte of variable address
+010C	F6			1:200		mov @r0, A 				; save high byte of variable to r0
+010D	C9			1:201		xch A, r1				; restore Acc from r1
+010E	22			1:202		ret
+				1:203		
+				1:204	; the address of LE 16bit integer is stored in DPTR
+010F				1:205	DecrementWord:
+010F	12	01	1C	1:206		lcall LoadVariable 		; load address of variable to r0
+0112	E6			1:207		mov A, @r0				; load low byte of variable to A
+0113	14			1:208		dec A					; decrement low byte of variable
+0114	F6			1:209		mov @r0, A				; save low byte of variable
+0115	64	FF		1:210		xrl A, #FFh				; check if A is 255 (0xFF)
+0117	70	02		1:211		jnz __DecrementWord_End	; if not, jump to end (no underflow)
+0119	08			1:212		inc r0					; set r0 to high byte of variable address
+011A	16			1:213		dec @r0					; decrement high byte of variable
+011B				1:214	__DecrementWord_End:
+011B	22			1:215		ret
+				1:216	
+				1:217	; loads the variable address from memory to the return register r0
+011C				1:218	LoadVariable:
+011C	C9			1:219		xch A, r1 		; save Acc to r1
+011D	E4			1:220		clr A			; wipe Acc
+011E	93			1:221		movc A, @A+DPTR	; load variable address from memory
+011F	C8			1:222		xch A, r0		; save variable address to return register r0 
+0120	C9			1:223		xch A, r1		; restore Acc from r1
+0121	22			1:224		ret
+				1:225	
+0122				1:226	_seconds:
+0122	32	1:227		db 32h
+0123				1:228	_clock_ticks:
+0123	33	1:229		db 33h ; 16 bit integer starting at RAM addr 0x33
+0124				1:230	_pointer: 
+0124	4B	1:231		db 4Bh ; 16 bit integer pointing from 40h to 49h
+0125				1:232	_average:
+0125	4A	1:233		db 4Ah ; 16 bit integer average of all 10 temperature measurements
+0126				1:234	_average_rest:
+0126	4C	1:235		db 4Ch ; 16 bit integer rest that accumulates when calculating average
+0127				1:236	_loop_variable:
+0127	4D	1:237		db 4Dh ; 16 bit integer from #0d to #10d for a loop of 10 cycles
+				1:238	
+
+ 238 Zeilen übersetzt. Code Ende bei 0128h.
+ 21 Labels:
+	Initialisierung: 000Dh
+	OnTick: 0069h
+	__OnTick_End: 007Ah
+	DoAfterTenSeconds: 0081h
+	__DoAfterTenSeconds_End: 009Ch
+	LoadLoopVariable: 009Fh
+	CalculateAverage: 00A8h
+	__CalculateAverage_End: 00CDh
+	CompareAverages: 00EAh
+	__CompareAverages_Zero: 00F5h
+	ResetClockTicks: 00F9h
+	SetWord: 0104h
+	DecrementWord: 010Fh
+	__DecrementWord_End: 011Bh
+	LoadVariable: 011Ch
+	_seconds: 0122h
+	_clock_ticks: 0123h
+	_pointer: 0124h
+	_average: 0125h
+	_average_rest: 0126h
+	_loop_variable: 0127h
+
