@@ -1,0 +1,18 @@
+40h - 49h 	: temperatures		:: 0h
+4Ah 		: average			:: 0h
+4Bh			: pointer			:: 40h
+4Ch			: rest				:: 0h
+4Dh			: Loop variable		:: 0h
+4Eh			: Tendenz			:: 2h
+
+Expected Behaviour: 
+	- with the first run everything should be initialized properly (see above)
+	
+	- After every DoAfterTenSeconds() it should
+		- increment 4Dh by 1d
+		- calculate a new Average and store in 4Ah
+			- test if manipulating the Average after 10 runs to be lower, if it actually indicates so in 4Eh (4Eh should store #0)
+		- calculate a new Tendenz and store in 4Eh (should remain at #1)
+		
+	- Once Address 49h has been reached in pointer stored in 4Bh, it should reset the pointer to 40h accordingly
+	- the rest from Address 4Ch should be added to the average within 4Ah accordingly
