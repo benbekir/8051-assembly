@@ -86,14 +86,18 @@ OnTick:
 	; clock_ticks is 0 (a second has passed)
 	; ResetClockTicks is inlibable (no need to store stack frame)
 	lcall ResetClockTicks		; reset _clock_ticks to 4000
-	; IncrementSeconds is NOT inlibable (but don't need to preserve registers here)
-	lcall IncrementSeconds		; increment _seconds
+	lcall OnEachSecond 			; call OnEachSecond
 __OnTick_End:
 	; decrement _clock_ticks
 	mov DPTR, #_clock_ticks		; load clock_ticks** to dptr
 	; NOT inlinable (but don't need to preserve registers here)
 	lcall DecrementWord			; decrement clock_ticks by 1
 	reti
+
+OnEachSecond:
+	; IncrementSeconds is NOT inlibable (but don't need to preserve registers here)
+	lcall IncrementSeconds		; increment _seconds
+	ret
 
 IncrementSeconds:
 	; increment _seconds
