@@ -1,4 +1,5 @@
 ---
+output: pdf_document
 export_on_save:
   pandoc: true
 ---
