@@ -1,3 +1,9 @@
+---
+output: pdf_document
+export_on_save:
+  pandoc: true
+---
+
 # Dokumentation
 
 > Die Clock Operationen funktionieren nur wenn definierte Werte an Port 0 und 1 angelegt werden (siehe Tabelle unten).
@@ -33,14 +39,14 @@ Port 1 gibt an, welches element betroffen ist (Sekunden, Minuten, Stunden).
 |0|Normal|
 |1|Inkrementieren|
 |2|Dekrementieren|
-|$\geq$3|Invalid|
+|$\geq 3$|Invalid|
 
 |Port 1|Auswahl|
 | --- | --- |
 |0|Seconds|
 |1|Minutes|
 |2|Hours|
-|$\geq$3|Invalid|
+|$\geq 3$|Invalid|
 
 Die Ports werden jede Sekunde abgefragt und die jeweilige Operation wird anschließend ausgeführt.
 Das Stellen der einzelnen Spalten geschieht unabhängig von den anderen. Es werden keine 'carries' erzeugt.
