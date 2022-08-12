@@ -21,6 +21,7 @@
 ; - function SF_RESTORE is called to restore the stack frame (contents of r0 - r7).
 ; parameters and return values are also stored on the stack.
 
+; NOTE: Weitere Dokumentation kann unter 'documentation/'documentation' gefunden werden.
 
 #cpu = 89S8252    ; @12 MHz
 
@@ -94,6 +95,7 @@ Initialisierung:
 	end
 ; * * * Hauptprogramm Ende * * *
 
+; Called every 1/4000 seconds and calls OnEachSecond every 4000 ticks
 OnTick:
 	; check if _clock_ticks is 0
 	mov DPTR, #_clock_ticks		; load clock_ticks** to dptr
@@ -115,6 +117,7 @@ __OnTick_End:
 	lcall DecrementWord			; decrement clock_ticks by 1
 	reti
 
+; Called on each second and handles time set events or increments the seconds
 OnEachSecond:
 	mov A, P0					; load P0 to A
 	; check if P0 is 0
@@ -178,8 +181,8 @@ OnEachSecond:
 
 ; param[0] = void* variable to increment
 ; param[1] = void* inclusive overflow value 
-; if the value reaches the inclusive overflow value (in params), it is reset to 0
-; expects single byte parameter passed via stack.
+; if the value surpasses the inclusive overflow value (in params), it is reset to 0
+; both parameters passed via stack.
 ; returns 0xff if overflow, 0 otherwise
 Increment:
 	pop SF_DIRECT				; pop our return address high byte
@@ -211,7 +214,7 @@ Increment:
 ; param[0] = variable to decrement
 ; param[1] = inclusive MAX value 
 ; if the value reaches 0, it is reset to 0 the maximum value < 255 (via params)
-; expects single byte parameter passed via stack.
+; both parameter passed via stack.
 ; returns 0xff if underflow, 0 otherwise
 Decrement:
 	pop SF_DIRECT				; pop our return address high byte
@@ -296,9 +299,9 @@ ResetClockTicks:
 	; prepare parameters
 	mov DPTR, #_clock_ticks	; _clock_ticks** must be passed in dptr register
 	; pass target value via stack
-	mov SF_DIRECT, #01h		; high byte of target value 0x0FA0 (4000)
+	mov SF_DIRECT, #0Fh		; high byte of target value 0x0FA0 (4000)
 	push SF_DIRECT
-	mov SF_DIRECT, #90h		; low byte of target value 0x0FA0 (4000)
+	mov SF_DIRECT, #A0h		; low byte of target value 0x0FA0 (4000)
 	push SF_DIRECT
 	lcall SetWord
 	ret
@@ -492,7 +495,7 @@ __SF_RESTORE_RestoreContext:
 __SF_RESTORE_End:
 	ret
 
-; DON't SWAP ORDERS OF THESE VARIABLES - START!
+; DON'T SWAP ORDERS OF THESE VARIABLES - START!
 _seconds:
 	db 32h
 _minutes:
@@ -500,12 +503,12 @@ _minutes:
 _hours:
 	db 30h
 _max_seconds:
-	db 33h
+	db 35h
 _max_minutes:
 	db 34h
 _max_hours:
-	db 35h
-; DON't SWAP ORDERS OF THESE VARIABLES - END!
+	db 33h
+; DON'T SWAP ORDERS OF THESE VARIABLES - END!
 
 _clock_ticks:
 	db 36h ; 16 bit integer starting at RAM addr 0x36

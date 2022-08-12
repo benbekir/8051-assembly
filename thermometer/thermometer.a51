@@ -4,6 +4,8 @@
 
 #use LCALL
 
+; NOTE: Weitere Dokumentation kann unter 'documentation/'documentation' gefunden werden.
+
 ajmp Initialisierung
 
 Timer 0:	; Timer 0 Interrupt

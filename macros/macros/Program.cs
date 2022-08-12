@@ -16,7 +16,7 @@ public class Program
     {
         if (args.Length is 0 or > 1)
         {
-            Console.WriteLine("Usage: demacro <file>");
+            Console.WriteLine("Usage: macros <file>");
             return;
         }
         string[] lines = File.ReadAllLines(args[0]);
