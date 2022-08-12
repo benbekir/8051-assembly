@@ -182,10 +182,8 @@ __CompareAverages_Zero:
 ; set clock ticks to 40000d
 ResetClockTicks:
 	mov DPTR, #_clock_ticks
-	mov r2, #0Fh
-	mov r3, #A0h ; !!! Change this back !!!
-	;mov r2, #9Ch; high byte of target value 0x0FA0 (40000)
-	;mov r3, #40h; low byte of target value 0x0FA0 (40000)
+	mov r2, #9Ch; high byte of target value 0x0FA0 (40000)
+	mov r3, #40h; low byte of target value 0x0FA0 (40000)
 	lcall SetWord
 	ret
 	
