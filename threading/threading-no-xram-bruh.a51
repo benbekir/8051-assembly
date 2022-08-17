@@ -50,6 +50,13 @@
 #DEFINE CLOCK_MAX_SECONDS		#59d
 #DEFINE CLOCK_TICK_RESET_VALUE	#100d ; 100 at 100Hz = 1s
 
+; ============================================================================
+; <!-------------------- NO DEFINITIONS BELOW THIS LINE -------------------->
+; ============================================================================
+
+; must be up here if we want to preserve the MEMORY SETUP documentation
+; the pre-assembler will strip everything until the first non-comment or #DEFINE
+; so you won't see this comment in the generated code :)
 #cpu = 89S8252    ; @12 MHz
 
 ; ============================================================================
@@ -95,7 +102,7 @@ Initialize:
 	mov	SP, STACK_START
 
 	; reset clock tick counter
-	lcall ResetClockTicks
+	lcall ResetTicks
 
 	orl TMOD, # 02h    ; Timer 0 im 8-Bit Autoreload-Modus. 
 	; Die �berlauffrequenz des Timer 0 betr�gt 4000 Hz, die Periodendauer 0,25 ms.
@@ -106,7 +113,9 @@ Initialize:
 	setb EA    ; globale Interruptfreigabe
 	setb TR0    ; Timer 0 l�uft.
 
+	; initialize clock
 	lcall Clock_Init
+	lcall Temperature_Init
 
 	; run sorting task by default
 	lcall Sort_Notify
@@ -423,6 +432,11 @@ Clock_IncrementHours:
 ;  								TEMPERATURE
 ; ============================================================================
 
+; setup code for the temperature sensor
+Temperature_Init:
+	; TODO
+	ret
+
 ; notifies the temperature sensor that a second has elapsed
 Temperature_Notify:
 	; TODO
@@ -433,6 +447,7 @@ Temperature_Notify:
 ; ============================================================================
 ; sorts the array of uin8_t values in XRAM
 
+; called only once, when the program starts
 Sort_Notify:
 	; TODO
 	ret
