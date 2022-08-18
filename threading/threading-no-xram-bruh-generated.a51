@@ -19,9 +19,9 @@
 ;  --------------+-------+-------+------+----------------------------------------------
 ;  RAM 3B	  	 | 0x50	 | 0x5f	 | 16   | RAM for Task 3B: Temperature
 ;  --------------+-------+-------+------+----------------------------------------------
-;  RAM 4  	 	 | -	 | -	 | 0    | RAM for Task 4: Sorting (allocation free)
+;  RAM 4  	 	 | 0x60	 | 0x67  | 8    | RAM for Task 4: Sorting
 ;  --------------+-------+-------+------+----------------------------------------------
-;  SWAP 		 | 0x60	 | 0x7f	 | 32   | swap area for execution context
+;  SWAP 		 | 0x68	 | 0x7f	 | 24   | swap area for execution context
 
 ; < 10 ms @12 MHz <=> 0.01 s / cycle @12,000,000Hz @ ~2cycles / instruction 
 ; => ~60,000 instructions per interrupt
@@ -44,7 +44,7 @@ Timer 0:    ; Timer 0 Interrupt
 
 Initialize:
 	; setup stack
-	mov	SP, #08h
+	mov	SP, #07h
 
 	; reset clock tick counter
 	lcall ResetTicks
@@ -75,7 +75,7 @@ Initialize:
 ; }
 OnTick:
 	; can not use registers here, execution context is not yet stored
-	djnz 30h, __OnTick_End
+	djnz 38h, __OnTick_End
 	; 10 ms elapsed -> let all tasks run
 	lcall ResetTicks
 	lcall TasksNofityAll
@@ -94,59 +94,59 @@ TasksNofityAll:
 
 ; reset ticks
 ResetTicks:
-	mov 30h, #40d
+	mov 38h, #40d
 	ret
 
 ; stores the execution context in the swap area
 EXC_STORE:
-	mov 5Ah, psw
-	mov 50h, a
-	mov 51h, b
-	mov 52h, r0
-	mov 53h, r1
-	mov 54h, r2
-	mov 55h, r3
-	mov 56h, r4
-	mov 57h, r5
-	mov 58h, r6
-	mov 59h, r7
-	mov 5Bh, p2
+	mov 72h, psw
+	mov 68h, a
+	mov 69h, b
+	mov 6Ah, r0
+	mov 6Bh, r1
+	mov 6Ch, r2
+	mov 6Dh, r3
+	mov 6Eh, r4
+	mov 6Fh, r5
+	mov 70h, r6
+	mov 71h, r7
+	mov 73h, p2
 	; store UINT32_0
-	mov 5Ch, 31h
-	mov 5Dh, 32h
-	mov 5Eh, 33h
-	mov 5Fh, 34h
+	mov 74h, 30h
+	mov 75h, 31h
+	mov 76h, 32h
+	mov 77h, 33h
 	; store UINT32_1
-	mov 60h, 35h
-	mov 61h, 36h
-	mov 62h, 37h
-	mov 63h, 38h
+	mov 78h, 34h
+	mov 79h, 35h
+	mov 7Ah, 36h
+	mov 7Bh, 37h
 	ret
 
 ; restores the execution context from the swap area
 EXC_RESTORE:
 	; restore UINT32_1
-	mov 38h, 63h
-	mov 37h, 62h
-	mov 36h, 61h
-	mov 35h, 60h
+	mov 37h, 7Bh
+	mov 36h, 7Ah
+	mov 35h, 79h
+	mov 34h, 78h
 	; restore UINT32_0
-	mov 34h, 5Fh
-	mov 33h, 5Eh
-	mov 32h, 5Dh
-	mov 31h, 5Ch
-	mov p2, 5Bh
-	mov r7, 59h
-	mov r6, 58h
-	mov r5, 57h
-	mov r4, 56h
-	mov r3, 55h
-	mov r2, 54h
-	mov r1, 53h
-	mov r0, 52h
-	mov b, 51h
-	mov a, 50h
-	mov psw, 5Ah
+	mov 33h, 77h
+	mov 32h, 76h
+	mov 31h, 75h
+	mov 30h, 74h
+	mov p2, 73h
+	mov r7, 71h
+	mov r6, 70h
+	mov r5, 6Fh
+	mov r4, 6Eh
+	mov r3, 6Dh
+	mov r2, 6Ch
+	mov r1, 6Bh
+	mov r0, 6Ah
+	mov b, 69h
+	mov a, 68h
+	mov psw, 72h
 	ret
 
 ; modifies a, b, r0-r3
@@ -245,21 +245,21 @@ __ShiftRight32_End:
 ; void ShiftRight32();
 Add32:
 	; byte 0
-	mov a, 31h		; load byte 0 (low byte) of UINT32_0 to a
-	add a, 35h		; add byte 0 (low byte) of UINT32_1 to byte 0 of UINT32_0
-	mov 31h, a		; store result in UINT32_0 low byte
+	mov a, 30h		; load byte 0 (low byte) of UINT32_0 to a
+	add a, 34h		; add byte 0 (low byte) of UINT32_1 to byte 0 of UINT32_0
+	mov 30h, a		; store result in UINT32_0 low byte
 	; byte 1
-	mov a, 32h		; load byte 1 of UINT32_0 to a
-	addc a, 36h		; add byte 1 of UINT32_1 to byte 1 of UINT32_0
-	mov 32h, a		; store result in UINT32_0 byte 1
+	mov a, 31h		; load byte 1 of UINT32_0 to a
+	addc a, 35h		; add byte 1 of UINT32_1 to byte 1 of UINT32_0
+	mov 31h, a		; store result in UINT32_0 byte 1
 	; byte 2
-	mov a, 33h		; load byte 2 of UINT32_0 to a
-	addc a, 37h		; add byte 2 of UINT32_1 to byte 2 of UINT32_0
-	mov 33h, a		; store result in UINT32_0 byte 2
+	mov a, 32h		; load byte 2 of UINT32_0 to a
+	addc a, 36h		; add byte 2 of UINT32_1 to byte 2 of UINT32_0
+	mov 32h, a		; store result in UINT32_0 byte 2
 	; byte 3
-	mov a, 34h		; load byte 3 of UINT32_0 to a
-	addc a, 38h		; add byte 3 of UINT32_1 to byte 3 of UINT32_0
-	mov 34h, a		; store result in UINT32_0 byte 3
+	mov a, 33h		; load byte 3 of UINT32_0 to a
+	addc a, 37h		; add byte 3 of UINT32_1 to byte 3 of UINT32_0
+	mov 33h, a		; store result in UINT32_0 byte 3
 	ret
 
 ; ============================================================================
@@ -535,18 +535,19 @@ Temperature_Init:
 	; 	  buffer[i] = 0;
 	; } 
 	; while (i > 0);
-	mov r2, #50h 		; load ring buffer base address to a
+	mov r2, #50h 		; load ring buffer base address to r2
 	dec r2									; dumb offset to get the first element
-	mov r1, #10d	; load buffer size to r2 (loop counter)
+	mov r1, #10d	; load buffer size to r1 (loop counter)
 	inc r1									; add 1 to r1 (loop counter)
 __Temperature_InitLoopHeader:
 	djnz r1, __Temperature_InitLoop
 	jmp __Temperature_InitLoopBreak
 __Temperature_InitLoop:
-	mov a, r2						; load ring buffer base address to a
-	add a, r1						; add offfset to base address to a
-	mov r0, a						; target address to r0
-	mov @r0, #0						; set element to 0
+	mov a, r2								; load ring buffer base address to a
+	add a, r1								; add offfset to base address to a
+	mov r0, a								; target address to r0
+	mov @r0, #0								; set element to 0
+	ljmp __Temperature_InitLoopHeader		; loop
 __Temperature_InitLoopBreak:
 	ret
 
@@ -565,7 +566,7 @@ __Temperature_NotifyEnd:
 
 Temperature_ResetTicks:
 	; reset temperature ticks
-	mov 5Ah, #10d	
+	mov 5Ah, #01d	
 	ret
 
 ; reads the temperature from port 2.
@@ -634,7 +635,7 @@ __Temperature_CalculateAverage_LoopBreak:
 	mov a, r0							; load old average to a
 	clr c								; clear carry
 	subb a, r1							; a = old average - new average
-	jz __Temperature_CalculateAverage_End
+	jc __Temperature_CalculateAverage_End
 	; new average is lower than old average.
 	mov r5, #0d
 __Temperature_CalculateAverage_End:
@@ -665,25 +666,33 @@ Temperature_16BitDivideBy10:
 	; something like this:
 	; uint16_t final_result = (uint16_t)(*((uint16_t*)&intermediate_result + 1) >> 3);
 	; but you know the deal, we can't do that on hardware, so we have to do it manually :)
-	mov r0, #3				; prepare loop counter
+	mov r0, #4				; prepare loop counter (must be 4 because we pre-decrement :/)
 __Temperature_DivideBy10_LoopHeader:
 	djnz r0, __Temperature_DivideBy10_Loop
 	ljmp __Temperature_DivideBy10_LoopBreak
 __Temperature_DivideBy10_Loop:
-	mov a, 34h		; load upper byte of the two upper bytes of intermediate_result to a
+	mov a, 33h		; load upper byte of the two upper bytes of intermediate_result to a
 	clr c					; clear carry flag
 	rrc a					; rotate right through carry
-	mov 34h, a		; store upper byte back to byte 3 of UINT32_0
+	mov 33h, a		; store upper byte back to byte 3 of UINT32_0
 
-	mov a, 33h		; load lower byte of the two upper bytes of intermediate_result to a
+	mov a, 32h		; load lower byte of the two upper bytes of intermediate_result to a
 	; don't clear carry flag, we need to treat this as the lower byte of an uint16_t.
 	rrc a					; rotate right through carry
-	mov 33h, a		; store lower byte back to byte 2 of UINT32_0
+	mov 32h, a		; store lower byte back to byte 2 of UINT32_0
+	ljmp __Temperature_DivideBy10_LoopHeader
 __Temperature_DivideBy10_LoopBreak:
 	; we did it :)
 	; we also know that the average of uint8_t's will always be less than 0x100, so we can just
 	; grab the lower byte of the upper two bytes of UINT32_0 and return it (byte 2).
-	push 33h			; push average temperature to stack
+	; first store our own return address
+	pop 03h			; pop return address high byte into r3
+	pop 02h			; pop return address low byte into r2
+	; push result
+	push 32h			; push average temperature to stack
+	; push return address
+	push 02h			; push return address low byte to stack
+	push 03h			; push return address high byte to stack
 	ret
 
 ; multiplies the temperature sum by 0xcccd and returns the result in UINT32_0.
@@ -702,15 +711,15 @@ Temperature_MultiplySumBy0xcccd:
 	; load uint16_t temperature sum to uint32_t "UINT32_0"
 	; accumulate = sum;
 	; low byte of sum to byte 0 (low byte) of UINT32_0
-	mov 31h, 5Eh
+	mov 30h, 5Eh
 	; high byte of sum to byte 1 of UINT32_0
-	mov 32h, 5Fh
+	mov 31h, 5Fh
 	; clear high bytes of UINT32_0
+	mov 32h, #0
 	mov 33h, #0
-	mov 34h, #0
 	; accumulate += (sum << 2);	
 	lcall Temperature_LoadSumToUINT32_1
-	mov r0, #35h
+	mov r0, #34h
 	push 00h						; push (uint32_t*)&UINT32_1 to stack
 	mov r0, #2d
 	push 00h						; push 2d to stack
@@ -718,7 +727,7 @@ Temperature_MultiplySumBy0xcccd:
 	lcall Add32
 	; accumulate += (sum << 3);
 	lcall Temperature_LoadSumToUINT32_1
-	mov r0, #35h
+	mov r0, #34h
 	push 00h						; push (uint32_t*)&UINT32_1 to stack
 	mov r0, #3d
 	push 00h						; push 3d to stack
@@ -726,7 +735,7 @@ Temperature_MultiplySumBy0xcccd:
 	lcall Add32
 	; accumulate += (sum << 6);
 	lcall Temperature_LoadSumToUINT32_1
-	mov r0, #35h
+	mov r0, #34h
 	push 00h						; push (uint32_t*)&UINT32_1 to stack
 	mov r0, #6d
 	push 00h						; push 6d to stack
@@ -734,7 +743,7 @@ Temperature_MultiplySumBy0xcccd:
 	lcall Add32
 	; accumulate += (sum << 7);
 	lcall Temperature_LoadSumToUINT32_1
-	mov r0, #35h
+	mov r0, #34h
 	push 00h						; push (uint32_t*)&UINT32_1 to stack
 	mov r0, #7d
 	push 00h						; push 7d to stack
@@ -742,7 +751,7 @@ Temperature_MultiplySumBy0xcccd:
 	lcall Add32
 	; accumulate += (sum << 10);
 	lcall Temperature_LoadSumToUINT32_1
-	mov r0, #35h
+	mov r0, #34h
 	push 00h						; push (uint32_t*)&UINT32_1 to stack
 	mov r0, #10d
 	push 00h						; push 10d to stack
@@ -750,7 +759,7 @@ Temperature_MultiplySumBy0xcccd:
 	lcall Add32
 	; accumulate += (sum << 11);
 	lcall Temperature_LoadSumToUINT32_1
-	mov r0, #35h
+	mov r0, #34h
 	push 00h						; push (uint32_t*)&UINT32_1 to stack
 	mov r0, #11d
 	push 00h						; push 11d to stack
@@ -758,7 +767,7 @@ Temperature_MultiplySumBy0xcccd:
 	lcall Add32
 	; accumulate += (sum << 14);
 	lcall Temperature_LoadSumToUINT32_1
-	mov r0, #35h
+	mov r0, #34h
 	push 00h						; push (uint32_t*)&UINT32_1 to stack
 	mov r0, #14d
 	push 00h						; push 14d to stack
@@ -766,7 +775,7 @@ Temperature_MultiplySumBy0xcccd:
 	lcall Add32
 	; accumulate += (sum << 15);
 	lcall Temperature_LoadSumToUINT32_1
-	mov r0, #35h
+	mov r0, #34h
 	push 00h						; push (uint32_t*)&UINT32_1 to stack
 	mov r0, #15d
 	push 00h						; push 15d to stack
@@ -778,12 +787,12 @@ Temperature_MultiplySumBy0xcccd:
 ; loads and expands uint16_t temperature sum to uint32_t UINT32_1 register
 Temperature_LoadSumToUINT32_1:
 	; low byte of sum to byte 0 (low byte) of UINT32_1
-	mov 35h, 5Eh
+	mov 34h, 5Eh
 	; high byte of sum to byte 1 of UINT32_1
-	mov 36h, 5Fh
+	mov 35h, 5Fh
 	; clear high bytes of UINT32_1
+	mov 36h, #0
 	mov 37h, #0
-	mov 38h, #0
 	ret
 
 ; ============================================================================

@@ -17,51 +17,52 @@
 
 ; Scheduler
 ; addresses
-#DEFINE STACK_START			#08h
-#DEFINE TICK_COUNTER 		30h
+; must be STACK_START = 0x8-1 = 7, because of the stack pointer
+#DEFINE STACK_START			#07h
 ; universal buffer for 32 bit calculations
-#DEFINE UINT32_00			31h
-#DEFINE UINT32_01			32h
-#DEFINE UINT32_02			33h
-#DEFINE UINT32_03			34h
+#DEFINE UINT32_00			30h
+#DEFINE UINT32_01			31h
+#DEFINE UINT32_02			32h
+#DEFINE UINT32_03			33h
 ; second universal buffer for 32 bit calculations
-#DEFINE UINT32_10			35h
-#DEFINE UINT32_11			36h
-#DEFINE UINT32_12			37h
-#DEFINE UINT32_13			38h
+#DEFINE UINT32_10			34h
+#DEFINE UINT32_11			35h
+#DEFINE UINT32_12			36h
+#DEFINE UINT32_13			37h
+#DEFINE TICK_COUNTER 		38h
 
 ; constants
 ; 40 at 4000Hz = 10 ms
 #DEFINE TICK_RESET_VALUE	#40d
-#DEFINE UINT32_0_PTR		#31h
-#DEFINE UINT32_1_PTR		#35h
+#DEFINE UINT32_0_PTR		#30h
+#DEFINE UINT32_1_PTR		#34h
 
 ; ============================================================================
 
 ; SWAP area
-#DEFINE SWAP_A			50h
-#DEFINE SWAP_B			51h
-#DEFINE SWAP_R0			52h
-#DEFINE SWAP_R1			53h
-#DEFINE SWAP_R2			54h
-#DEFINE SWAP_R3			55h
-#DEFINE SWAP_R4			56h
-#DEFINE SWAP_R5			57h
-#DEFINE SWAP_R6			58h
-#DEFINE SWAP_R7			59h
-#DEFINE SWAP_PSW		5Ah
+#DEFINE SWAP_A			68h
+#DEFINE SWAP_B			69h
+#DEFINE SWAP_R0			6Ah
+#DEFINE SWAP_R1			6Bh
+#DEFINE SWAP_R2			6Ch
+#DEFINE SWAP_R3			6Dh
+#DEFINE SWAP_R4			6Eh
+#DEFINE SWAP_R5			6Fh
+#DEFINE SWAP_R6			70h
+#DEFINE SWAP_R7			71h
+#DEFINE SWAP_PSW		72h
 ; port 2 conflicts between XRAM access and temperature sensor
-#DEFINE SWAP_P2			5Bh	
+#DEFINE SWAP_P2			73h
 
-#DEFINE SWAP_UINT32_00	5Ch
-#DEFINE SWAP_UINT32_01	5Dh
-#DEFINE SWAP_UINT32_02	5Eh
-#DEFINE SWAP_UINT32_03	5Fh
+#DEFINE SWAP_UINT32_00	74h
+#DEFINE SWAP_UINT32_01	75h
+#DEFINE SWAP_UINT32_02	76h
+#DEFINE SWAP_UINT32_03	77h
 
-#DEFINE SWAP_UINT32_10	60h
-#DEFINE SWAP_UINT32_11	61h
-#DEFINE SWAP_UINT32_12	62h
-#DEFINE SWAP_UINT32_13	63h
+#DEFINE SWAP_UINT32_10	78h
+#DEFINE SWAP_UINT32_11	79h
+#DEFINE SWAP_UINT32_12	7Ah
+#DEFINE SWAP_UINT32_13	7Bh
 
 ; ============================================================================
 
@@ -130,9 +131,9 @@
 ;  --------------+-------+-------+------+----------------------------------------------
 ;  RAM 3B	  	 | 0x50	 | 0x5f	 | 16   | RAM for Task 3B: Temperature
 ;  --------------+-------+-------+------+----------------------------------------------
-;  RAM 4  	 	 | -	 | -	 | 0    | RAM for Task 4: Sorting (allocation free)
+;  RAM 4  	 	 | 0x60	 | 0x67  | 8    | RAM for Task 4: Sorting
 ;  --------------+-------+-------+------+----------------------------------------------
-;  SWAP 		 | 0x60	 | 0x7f	 | 32   | swap area for execution context
+;  SWAP 		 | 0x68	 | 0x7f	 | 24   | swap area for execution context
 
 ; < 10 ms @12 MHz <=> 0.01 s / cycle @12,000,000Hz @ ~2cycles / instruction 
 ; => ~60,000 instructions per interrupt
@@ -646,18 +647,19 @@ Temperature_Init:
 	; 	  buffer[i] = 0;
 	; } 
 	; while (i > 0);
-	mov r2, TEMPERATURE_RING_BUFFER 		; load ring buffer base address to a
+	mov r2, TEMPERATURE_RING_BUFFER 		; load ring buffer base address to r2
 	dec r2									; dumb offset to get the first element
-	mov r1, TEMPERATURE_RING_BUFFER_SIZE	; load buffer size to r2 (loop counter)
+	mov r1, TEMPERATURE_RING_BUFFER_SIZE	; load buffer size to r1 (loop counter)
 	inc r1									; add 1 to r1 (loop counter)
 __Temperature_InitLoopHeader:
 	djnz r1, __Temperature_InitLoop
 	jmp __Temperature_InitLoopBreak
 __Temperature_InitLoop:
-	mov a, r2						; load ring buffer base address to a
-	add a, r1						; add offfset to base address to a
-	mov r0, a						; target address to r0
-	mov @r0, #0						; set element to 0
+	mov a, r2								; load ring buffer base address to a
+	add a, r1								; add offfset to base address to a
+	mov r0, a								; target address to r0
+	mov @r0, #0								; set element to 0
+	ljmp __Temperature_InitLoopHeader		; loop
 __Temperature_InitLoopBreak:
 	ret
 
@@ -745,7 +747,7 @@ __Temperature_CalculateAverage_LoopBreak:
 	mov a, r0							; load old average to a
 	clr c								; clear carry
 	subb a, r1							; a = old average - new average
-	jz __Temperature_CalculateAverage_End
+	jc __Temperature_CalculateAverage_End
 	; new average is lower than old average.
 	mov r5, TEMPERATURE_DRIFT_FALLING
 __Temperature_CalculateAverage_End:
@@ -776,7 +778,7 @@ Temperature_16BitDivideBy10:
 	; something like this:
 	; uint16_t final_result = (uint16_t)(*((uint16_t*)&intermediate_result + 1) >> 3);
 	; but you know the deal, we can't do that on hardware, so we have to do it manually :)
-	mov r0, #3				; prepare loop counter
+	mov r0, #4				; prepare loop counter (must be 4 because we pre-decrement :/)
 __Temperature_DivideBy10_LoopHeader:
 	djnz r0, __Temperature_DivideBy10_Loop
 	ljmp __Temperature_DivideBy10_LoopBreak
@@ -790,11 +792,19 @@ __Temperature_DivideBy10_Loop:
 	; don't clear carry flag, we need to treat this as the lower byte of an uint16_t.
 	rrc a					; rotate right through carry
 	mov UINT32_02, a		; store lower byte back to byte 2 of UINT32_0
+	ljmp __Temperature_DivideBy10_LoopHeader
 __Temperature_DivideBy10_LoopBreak:
 	; we did it :)
 	; we also know that the average of uint8_t's will always be less than 0x100, so we can just
 	; grab the lower byte of the upper two bytes of UINT32_0 and return it (byte 2).
+	; first store our own return address
+	pop DIRECT_R3			; pop return address high byte into r3
+	pop DIRECT_R2			; pop return address low byte into r2
+	; push result
 	push UINT32_02			; push average temperature to stack
+	; push return address
+	push DIRECT_R2			; push return address low byte to stack
+	push DIRECT_R3			; push return address high byte to stack
 	ret
 
 ; multiplies the temperature sum by 0xcccd and returns the result in UINT32_0.
