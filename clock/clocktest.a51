@@ -145,7 +145,7 @@ OnEachSecond:
 	push SF_DIRECT				; push offset to stack
 	lcall LoadVariableWithOffset
 	; leave value* on stack
-	mov DPTR, #_max_seconds			; load _max_seconds** to dptr
+	mov DPTR, #_max_seconds		; load _max_seconds** to dptr
 	mov SF_DIRECT, r0			; load offset to SF_DIRECT
 	push SF_DIRECT				; push offset to stack
 	lcall LoadVariableWithOffset

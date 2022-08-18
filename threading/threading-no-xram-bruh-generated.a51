@@ -1,114 +1,3 @@
-; ============================================================================
-; 								   MACROS
-; ============================================================================
-
-; register macros for direct address mode
-; register bank 0
-#DEFINE DIRECT_R0		00h
-#DEFINE DIRECT_R1		01h
-#DEFINE DIRECT_R2		02h
-#DEFINE DIRECT_R3		03h
-#DEFINE DIRECT_R4		04h
-#DEFINE DIRECT_R5		05h
-#DEFINE DIRECT_R6		06h
-#DEFINE DIRECT_R7		07h
-
-; ============================================================================
-
-; Scheduler
-; addresses
-#DEFINE STACK_START			#08h
-#DEFINE TICK_COUNTER 		30h
-; universal buffer for 32 bit calculations
-#DEFINE UINT32_00			31h
-#DEFINE UINT32_01			32h
-#DEFINE UINT32_02			33h
-#DEFINE UINT32_03			34h
-; second universal buffer for 32 bit calculations
-#DEFINE UINT32_10			35h
-#DEFINE UINT32_11			36h
-#DEFINE UINT32_12			37h
-#DEFINE UINT32_13			38h
-
-; constants
-; 40 at 4000Hz = 10 ms
-#DEFINE TICK_RESET_VALUE	#40d
-#DEFINE UINT32_0_PTR		#31h
-#DEFINE UINT32_1_PTR		#35h
-
-; ============================================================================
-
-; SWAP area
-#DEFINE SWAP_A			50h
-#DEFINE SWAP_B			51h
-#DEFINE SWAP_R0			52h
-#DEFINE SWAP_R1			53h
-#DEFINE SWAP_R2			54h
-#DEFINE SWAP_R3			55h
-#DEFINE SWAP_R4			56h
-#DEFINE SWAP_R5			57h
-#DEFINE SWAP_R6			58h
-#DEFINE SWAP_R7			59h
-#DEFINE SWAP_PSW		5Ah
-; port 2 conflicts between XRAM access and temperature sensor
-#DEFINE SWAP_P2			5Bh	
-
-#DEFINE SWAP_UINT32_00	5Ch
-#DEFINE SWAP_UINT32_01	5Dh
-#DEFINE SWAP_UINT32_02	5Eh
-#DEFINE SWAP_UINT32_03	5Fh
-
-#DEFINE SWAP_UINT32_10	60h
-#DEFINE SWAP_UINT32_11	61h
-#DEFINE SWAP_UINT32_12	62h
-#DEFINE SWAP_UINT32_13	63h
-
-; ============================================================================
-
-; CLOCK
-; memory addresses
-#DEFINE CLOCK_HOURS_PTR			#40h
-#DEFINE CLOCK_MINUTES_PTR		#41h
-#DEFINE CLOCK_SECONDS_PTR		#42h
-#DEFINE CLOCK_MAX_HOURS_PTR		#43h
-#DEFINE CLOCK_MAX_MINUTES_PTR	#44h
-#DEFINE CLOCK_MAX_SECONDS_PTR	#45h
-#DEFINE CLOCK_TICK_COUNTER		46h		
-
-; constants
-#DEFINE CLOCK_MAX_HOURS			#23d
-#DEFINE CLOCK_MAX_MINUTES		#59d
-#DEFINE CLOCK_MAX_SECONDS		#59d
-; 100 at 100Hz = 1s
-#DEFINE CLOCK_TICK_RESET_VALUE	#100d
-
-; ============================================================================
-
-; TEMPERATURE
-; memory addresses
-#DEFINE TEMPERATURE_RING_BUFFER		#50h
-#DEFINE TEMPERATURE_TICKS			5Ah
-#DEFINE TEMPERATURE_AVERAGE			5Bh
-#DEFINE TEMPERATURE_DRIFT			5Ch
-#DEFINE TEMPERATURE_RING_BUFFER_PTR	5Dh
-#DEFINE TEMPERATURE_SUM_LOW			5Eh
-#DEFINE TEMPERATURE_SUM_HIGH		5Fh
-
-; constants
-#DEFINE TEMPERATURE_RING_BUFFER_SIZE	#10d
-; 10 at 1Hz = 10s
-#DEFINE TEMPERATURE_TICKS_RESET_VALUE	#10d
-#DEFINE TEMPERATURE_DRIFT_FALLING		#0d
-#DEFINE TEMPERATURE_DRIFT_RISING		#1d
-#DEFINE TEMPERATURE_DRIFT_STEADY		#ffh
-
-; ============================================================================
-; <!-------------------- NO DEFINITIONS BELOW THIS LINE -------------------->
-; ============================================================================
-
-; must be up here if we want to preserve the MEMORY SETUP documentation
-; the pre-assembler will strip everything until the first non-comment or #DEFINE
-; so you won't see this comment in the generated code :)
 #cpu = 89S8252    ; @12 MHz
 #use LCALL
 
@@ -155,7 +44,7 @@ Timer 0:    ; Timer 0 Interrupt
 
 Initialize:
 	; setup stack
-	mov	SP, STACK_START
+	mov	SP, #08h
 
 	; reset clock tick counter
 	lcall ResetTicks
@@ -186,7 +75,7 @@ Initialize:
 ; }
 OnTick:
 	; can not use registers here, execution context is not yet stored
-	djnz TICK_COUNTER, __OnTick_End
+	djnz 30h, __OnTick_End
 	; 10 ms elapsed -> let all tasks run
 	lcall ResetTicks
 	lcall TasksNofityAll
@@ -205,70 +94,70 @@ TasksNofityAll:
 
 ; reset ticks
 ResetTicks:
-	mov TICK_COUNTER, TICK_RESET_VALUE
+	mov 30h, #40d
 	ret
 
 ; stores the execution context in the swap area
 EXC_STORE:
-	mov SWAP_PSW, psw
-	mov SWAP_A, a
-	mov SWAP_B, b
-	mov SWAP_R0, r0
-	mov SWAP_R1, r1
-	mov SWAP_R2, r2
-	mov SWAP_R3, r3
-	mov SWAP_R4, r4
-	mov SWAP_R5, r5
-	mov SWAP_R6, r6
-	mov SWAP_R7, r7
-	mov SWAP_P2, p2
+	mov 5Ah, psw
+	mov 50h, a
+	mov 51h, b
+	mov 52h, r0
+	mov 53h, r1
+	mov 54h, r2
+	mov 55h, r3
+	mov 56h, r4
+	mov 57h, r5
+	mov 58h, r6
+	mov 59h, r7
+	mov 5Bh, p2
 	; store UINT32_0
-	mov SWAP_UINT32_00, UINT32_00
-	mov SWAP_UINT32_01, UINT32_01
-	mov SWAP_UINT32_02, UINT32_02
-	mov SWAP_UINT32_03, UINT32_03
+	mov 5Ch, 31h
+	mov 5Dh, 32h
+	mov 5Eh, 33h
+	mov 5Fh, 34h
 	; store UINT32_1
-	mov SWAP_UINT32_10, UINT32_10
-	mov SWAP_UINT32_11, UINT32_11
-	mov SWAP_UINT32_12, UINT32_12
-	mov SWAP_UINT32_13, UINT32_13
+	mov 60h, 35h
+	mov 61h, 36h
+	mov 62h, 37h
+	mov 63h, 38h
 	ret
 
 ; restores the execution context from the swap area
 EXC_RESTORE:
 	; restore UINT32_1
-	mov UINT32_13, SWAP_UINT32_13
-	mov UINT32_12, SWAP_UINT32_12
-	mov UINT32_11, SWAP_UINT32_11
-	mov UINT32_10, SWAP_UINT32_10
+	mov 38h, 63h
+	mov 37h, 62h
+	mov 36h, 61h
+	mov 35h, 60h
 	; restore UINT32_0
-	mov UINT32_03, SWAP_UINT32_03
-	mov UINT32_02, SWAP_UINT32_02
-	mov UINT32_01, SWAP_UINT32_01
-	mov UINT32_00, SWAP_UINT32_00
-	mov p2, SWAP_P2
-	mov r7, SWAP_R7
-	mov r6, SWAP_R6
-	mov r5, SWAP_R5
-	mov r4, SWAP_R4
-	mov r3, SWAP_R3
-	mov r2, SWAP_R2
-	mov r1, SWAP_R1
-	mov r0, SWAP_R0
-	mov b, SWAP_B
-	mov a, SWAP_A
-	mov psw, SWAP_PSW
+	mov 34h, 5Fh
+	mov 33h, 5Eh
+	mov 32h, 5Dh
+	mov 31h, 5Ch
+	mov p2, 5Bh
+	mov r7, 59h
+	mov r6, 58h
+	mov r5, 57h
+	mov r4, 56h
+	mov r3, 55h
+	mov r2, 54h
+	mov r1, 53h
+	mov r0, 52h
+	mov b, 51h
+	mov a, 50h
+	mov psw, 5Ah
 	ret
 
 ; modifies a, b, r0-r3
 ; void ShiftLeft32(uint32_t* value, byte count);
 ShiftLeft32:
 	; store our return address
-	pop DIRECT_R3			; high byte to r3
-	pop DIRECT_R2			; low byte to r2
+	pop 03h			; high byte to r3
+	pop 02h			; low byte to r2
 	; now get parameters
-	pop DIRECT_R1			; count to r1
-	pop DIRECT_R0			; uint32_t* to r0
+	pop 01h			; count to r1
+	pop 00h			; uint32_t* to r0
 	mov b, r0 				; store backup of uint32_t* in b
 	; shift left
 __ShiftLeft32_Loop:
@@ -300,19 +189,19 @@ __ShiftLeft32_Loop:
 	ljmp __ShiftLeft32_Loop
 __ShiftLeft32_End:
 	; now restore the return address
-	push DIRECT_R2			; low byte to stack
-	push DIRECT_R3			; high byte to stack
+	push 02h			; low byte to stack
+	push 03h			; high byte to stack
 	ret
 
 ; modifies a, b, r0-r3
 ; void ShiftRight32(uint32_t* value, byte count);
 ShiftRight32:
 	; store our return address
-	pop DIRECT_R3			; high byte to r3
-	pop DIRECT_R2			; low byte to r2
+	pop 03h			; high byte to r3
+	pop 02h			; low byte to r2
 	; now get parameters
-	pop DIRECT_R1			; count to r1
-	pop DIRECT_R0			; uint32_t* to r0
+	pop 01h			; count to r1
+	pop 00h			; uint32_t* to r0
 	; this time we need to start shifting at the highest byte
 	mov a, r0 				; uint32_t* to a
 	add a, #3				; add 3 to a to get pointer at highest byte
@@ -348,29 +237,29 @@ __ShiftRight32_Loop:
 	ljmp __ShiftRight32_Loop
 __ShiftRight32_End:
 	; now restore the return address
-	push DIRECT_R2			; low byte to stack
-	push DIRECT_R3			; high byte to stack
+	push 02h			; low byte to stack
+	push 03h			; high byte to stack
 	ret
 
 ; adds the UINT32_0 to UINT32_1 and stores the result in UINT32_0
 ; void ShiftRight32();
 Add32:
 	; byte 0
-	mov a, UINT32_00		; load byte 0 (low byte) of UINT32_0 to a
-	add a, UINT32_10		; add byte 0 (low byte) of UINT32_1 to byte 0 of UINT32_0
-	mov UINT32_00, a		; store result in UINT32_0 low byte
+	mov a, 31h		; load byte 0 (low byte) of UINT32_0 to a
+	add a, 35h		; add byte 0 (low byte) of UINT32_1 to byte 0 of UINT32_0
+	mov 31h, a		; store result in UINT32_0 low byte
 	; byte 1
-	mov a, UINT32_01		; load byte 1 of UINT32_0 to a
-	addc a, UINT32_11		; add byte 1 of UINT32_1 to byte 1 of UINT32_0
-	mov UINT32_01, a		; store result in UINT32_0 byte 1
+	mov a, 32h		; load byte 1 of UINT32_0 to a
+	addc a, 36h		; add byte 1 of UINT32_1 to byte 1 of UINT32_0
+	mov 32h, a		; store result in UINT32_0 byte 1
 	; byte 2
-	mov a, UINT32_02		; load byte 2 of UINT32_0 to a
-	addc a, UINT32_12		; add byte 2 of UINT32_1 to byte 2 of UINT32_0
-	mov UINT32_02, a		; store result in UINT32_0 byte 2
+	mov a, 33h		; load byte 2 of UINT32_0 to a
+	addc a, 37h		; add byte 2 of UINT32_1 to byte 2 of UINT32_0
+	mov 33h, a		; store result in UINT32_0 byte 2
 	; byte 3
-	mov a, UINT32_03		; load byte 3 of UINT32_0 to a
-	addc a, UINT32_13		; add byte 3 of UINT32_1 to byte 3 of UINT32_0
-	mov UINT32_03, a		; store result in UINT32_0 byte 3
+	mov a, 34h		; load byte 3 of UINT32_0 to a
+	addc a, 38h		; add byte 3 of UINT32_1 to byte 3 of UINT32_0
+	mov 34h, a		; store result in UINT32_0 byte 3
 	ret
 
 ; ============================================================================
@@ -412,18 +301,18 @@ __Reaction_NotifyEnd:
 
 ; initializes the clock
 Clock_Init:
-	mov r0, CLOCK_HOURS_PTR
+	mov r0, #40h
 	mov @r0, #00h				; hours
-	mov r0, CLOCK_MINUTES_PTR
+	mov r0, #41h
 	mov @r0, #00h				; minutes
-	mov r0, CLOCK_SECONDS_PTR
+	mov r0, #42h
 	mov @r0, #00h				; seconds
-	mov r0, CLOCK_MAX_HOURS_PTR
-	mov @r0, CLOCK_MAX_HOURS
-	mov r0, CLOCK_MAX_MINUTES_PTR
-	mov @r0, CLOCK_MAX_MINUTES
-	mov r0, CLOCK_MAX_SECONDS_PTR
-	mov @r0, CLOCK_MAX_SECONDS
+	mov r0, #43h
+	mov @r0, #23d
+	mov r0, #44h
+	mov @r0, #59d
+	mov r0, #45h
+	mov @r0, #59d
 	lcall Clock_ResetTicks
 	ret
 
@@ -434,7 +323,7 @@ Clock_Init:
 ;  	  Temperature_Notify();
 ; }
 Clock_Notify:
-	djnz CLOCK_TICK_COUNTER, __Clock_NotifyEnd
+	djnz 46h, __Clock_NotifyEnd
 	; a second has elapsed
 	lcall Clock_ResetTicks
 	lcall Clock_OnEachSecond
@@ -443,7 +332,7 @@ __Clock_NotifyEnd:
 	ret
 
 Clock_ResetTicks:
-	mov CLOCK_TICK_COUNTER, CLOCK_TICK_RESET_VALUE
+	mov 46h, #100d
 	ret
 
 ; Called on each second and handles time set events or increments the seconds
@@ -493,14 +382,14 @@ __Clock_OnEachSecond_SetTime:
 	jz __Clock_OnEachSecond_Normal
 	; selection is valid, set clock
 	; prepare parameters for function call
-	mov a, CLOCK_HOURS_PTR		; load hours pointer
+	mov a, #40h		; load hours pointer
 	add a, r1					; add selection mask (offset) to pointer
 	mov r3, a					; save pointer to r3
-	push DIRECT_R3				; push pointer to stack
-	mov a, CLOCK_MAX_HOURS_PTR	; load max hours pointer
+	push 03h				; push pointer to stack
+	mov a, #43h	; load max hours pointer
 	add a, r1					; add selection mask (offset) to pointer
 	mov r3, a					; save pointer to r3
-	push DIRECT_R3				; push pointer to stack
+	push 03h				; push pointer to stack
 	; prepare function call
 	mov a, r0					; load mode mask to a
 	; if MODE mask is 0 -> increment, 1 -> decrement
@@ -520,12 +409,12 @@ __Clock_OnEachSecond_End:
 	; BranchTable[1] = Decrement
 __Clock_OnEachSecond_BranchTable:
 	lcall Clock_Increment		; 3 bytes
-	pop DIRECT_R0				; 2 byte (discard return value)
+	pop 00h				; 2 byte (discard return value)
 	nop							; 1 byte
 	nop							; 1 byte
 	ret							; 1 byte
 	lcall Clock_Decrement		; this is __OnEachSecond_Increment + 8 :)
-	pop DIRECT_R0				; 2 byte (discard return value)
+	pop 00h				; 2 byte (discard return value)
 	nop							; 1 byte
 	nop							; 1 byte
 	ret							; 1 byte
@@ -536,11 +425,11 @@ __Clock_OnEachSecond_BranchTable:
 ; void Clock_Increment(uint8_t* variable, uint8_t* inclusive_overflow_value);
 Clock_Increment:
 	; save our own return address :)
-	pop DIRECT_R7				; high byte to r7
-	pop DIRECT_R6				; low byte to r6
+	pop 07h				; high byte to r7
+	pop 06h				; low byte to r6
 	; now load our parameters
-	pop DIRECT_R1				; load inclusive_overflow_value* to r1
-	pop DIRECT_R0				; load variable* to r0
+	pop 01h				; load inclusive_overflow_value* to r1
+	pop 00h				; load variable* to r0
 	mov a, @r1					; dereference inclusive_overflow_value to a
 	; now do the increment
 	inc @r0						; increment variable
@@ -553,9 +442,9 @@ Clock_Increment:
 	mov @r0, #00h				; reset variable to 0
 	mov r5, #0ffh				; set return value to 0xff
 __Clock_Increment_NoOverflow:
-	push DIRECT_R5				; push return value to stack
-	push DIRECT_R6				; restore return address (low byte)
-	push DIRECT_R7				; restore return address (high byte)
+	push 05h				; push return value to stack
+	push 06h				; restore return address (low byte)
+	push 07h				; restore return address (high byte)
 	ret
 
 ; if the value reaches 0, it is reset the maximum value < 255 (via params)
@@ -564,11 +453,11 @@ __Clock_Increment_NoOverflow:
 ; void Clock_Decrement(uint8_t* variable, uint8_t* inclusive_max_value);
 Clock_Decrement:
 	; save our own return address :)
-	pop DIRECT_R7				; high byte to r7
-	pop DIRECT_R6				; low byte to r6
+	pop 07h				; high byte to r7
+	pop 06h				; low byte to r6
 	; now load our parameters
-	pop DIRECT_R1				; load inclusive_max_value* to r1
-	pop DIRECT_R0				; load variable* to r0
+	pop 01h				; load inclusive_max_value* to r1
+	pop 00h				; load variable* to r0
 	mov a, @r1					; dereference inclusive_max_value to a
 	; now do the decrement
 	dec @r0						; decrement variable
@@ -582,18 +471,18 @@ Clock_Decrement:
 	mov @r0, a					; reset variable to inclusive_max_value
 	mov r5, #0ffh				; set return value to 0xff
 __Clock_Decrement_NoUnderflow:
-	push DIRECT_R5				; push return value to stack
-	push DIRECT_R6				; restore return address (low byte)
-	push DIRECT_R7				; restore return address (high byte)
+	push 05h				; push return value to stack
+	push 06h				; restore return address (low byte)
+	push 07h				; restore return address (high byte)
 	ret
 
 Clock_IncrementSeconds:
-	mov r0, CLOCK_SECONDS_PTR		; load seconds pointer to r0
-	push DIRECT_R0					; push pointer to stack
-	mov r0, CLOCK_MAX_SECONDS_PTR	; load max seconds pointer to stack
-	push DIRECT_R0					; push pointer to stack
+	mov r0, #42h		; load seconds pointer to r0
+	push 00h					; push pointer to stack
+	mov r0, #45h	; load max seconds pointer to stack
+	push 00h					; push pointer to stack
 	lcall Clock_Increment			; call Clock_Increment
-	pop DIRECT_R0					; pop return value (overflow flag) from stack
+	pop 00h					; pop return value (overflow flag) from stack
 	mov a, r0						; load overflow flag to a
 	jz __Clock_IncrementSeconds_NoOverflow
 	; overflow, so increment minutes
@@ -602,12 +491,12 @@ __Clock_IncrementSeconds_NoOverflow:
 	ret
 
 Clock_IncrementMinutes:
-	mov r0, CLOCK_MINUTES_PTR		; load minutes pointer to r0
-	push DIRECT_R0					; push pointer to stack
-	mov r0, CLOCK_MAX_MINUTES_PTR	; load max minutes pointer to stack
-	push DIRECT_R0					; push pointer to stack
+	mov r0, #41h		; load minutes pointer to r0
+	push 00h					; push pointer to stack
+	mov r0, #44h	; load max minutes pointer to stack
+	push 00h					; push pointer to stack
 	lcall Clock_Increment			; call Clock_Increment
-	pop DIRECT_R0					; pop return value (overflow flag) from stack
+	pop 00h					; pop return value (overflow flag) from stack
 	mov a, r0						; load overflow flag to a
 	jz __Clock_IncrementMinutes_NoOverflow
 	; overflow, so increment hours
@@ -616,12 +505,12 @@ __Clock_IncrementMinutes_NoOverflow:
 	ret
 
 Clock_IncrementHours:
-	mov r0, CLOCK_HOURS_PTR		; load hours pointer to r0
-	push DIRECT_R0				; push pointer to stack
-	mov r0, CLOCK_MAX_HOURS_PTR	; load max hours pointer to stack
-	push DIRECT_R0				; push pointer to stack
+	mov r0, #40h		; load hours pointer to r0
+	push 00h				; push pointer to stack
+	mov r0, #43h	; load max hours pointer to stack
+	push 00h				; push pointer to stack
 	lcall Clock_Increment		; call Clock_Increment
-	pop DIRECT_R0				; discard return value (there are no days to increment)
+	pop 00h				; discard return value (there are no days to increment)
 	ret
 
 ; ============================================================================
@@ -633,9 +522,9 @@ Temperature_Init:
 	lcall Temperature_ResetTicks
 	lcall Temperature_ResetRingBufferPointer
 	; clear average
-	mov TEMPERATURE_AVERAGE, #0h
+	mov 5Bh, #0h
 	; set drift to "steady" for now
-	mov TEMPERATURE_DRIFT, TEMPERATURE_DRIFT_STEADY
+	mov 5Ch, #ffh
 	; clear temperature buffer (all 0)
 
 	; buffer--; // loop breaks before setting the first element :P
@@ -646,9 +535,9 @@ Temperature_Init:
 	; 	  buffer[i] = 0;
 	; } 
 	; while (i > 0);
-	mov r2, TEMPERATURE_RING_BUFFER 		; load ring buffer base address to a
+	mov r2, #50h 		; load ring buffer base address to a
 	dec r2									; dumb offset to get the first element
-	mov r1, TEMPERATURE_RING_BUFFER_SIZE	; load buffer size to r2 (loop counter)
+	mov r1, #10d	; load buffer size to r2 (loop counter)
 	inc r1									; add 1 to r1 (loop counter)
 __Temperature_InitLoopHeader:
 	djnz r1, __Temperature_InitLoop
@@ -668,7 +557,7 @@ __Temperature_InitLoopBreak:
 ;      Temperature_Measure();
 ; }
 Temperature_Notify:
-	djnz TEMPERATURE_TICKS, __Temperature_NotifyEnd
+	djnz 5Ah, __Temperature_NotifyEnd
 	lcall Temperature_ResetTicks
 	lcall Temperature_Measure
 __Temperature_NotifyEnd:
@@ -676,22 +565,22 @@ __Temperature_NotifyEnd:
 
 Temperature_ResetTicks:
 	; reset temperature ticks
-	mov TEMPERATURE_TICKS, TEMPERATURE_TICKS_RESET_VALUE	
+	mov 5Ah, #10d	
 	ret
 
 ; reads the temperature from port 2.
 Temperature_Measure:
 	mov r2, p2							; get snapshot of current temperature
-	mov r1, TEMPERATURE_RING_BUFFER_PTR	; load ring buffer pointer to r1
-	mov a, TEMPERATURE_RING_BUFFER 		; load ring buffer base address to a
+	mov r1, 5Dh	; load ring buffer pointer to r1
+	mov a, #50h 		; load ring buffer base address to a
 	add a, r1							; add ring buffer pointer to base address to a
 	mov r0, a							; target address to r0
 	mov a, r2							; load temperature to a
 	mov @r0, a							; store temperature in ring buffer
-	inc TEMPERATURE_RING_BUFFER_PTR		; increment ring buffer pointer
+	inc 5Dh		; increment ring buffer pointer
 	; check if ring buffer pointer is at the end of the buffer
-	mov a, TEMPERATURE_RING_BUFFER_SIZE	; load ring buffer size to a
-	xrl a, TEMPERATURE_RING_BUFFER_PTR	; compare ring buffer pointer to size
+	mov a, #10d	; load ring buffer size to a
+	xrl a, 5Dh	; compare ring buffer pointer to size
 	jnz __Temperature_MeasureRingBufferEnd
 	; ring buffer pointer is at the end of the buffer, so reset it to 0
 	lcall Temperature_ResetRingBufferPointer
@@ -701,30 +590,30 @@ __Temperature_MeasureRingBufferEnd:
 
 Temperature_ResetRingBufferPointer:
 	; reset ring buffer pointer to 0
-	mov TEMPERATURE_RING_BUFFER_PTR, #0h
+	mov 5Dh, #0h
 	ret
 
 ; calculates the average of the temperature buffer and determines the temperature drift.
 Temperature_CalculateAverage:
 	; calculate average (sum of all elements in the buffer divided by the number of elements)
 	; sum = 0;
-	mov TEMPERATURE_SUM_LOW, #0h 		; low byte of sum
-	mov TEMPERATURE_SUM_HIGH, #0h 		; high byte of sum
+	mov 5Eh, #0h 		; low byte of sum
+	mov 5Fh, #0h 		; high byte of sum
 	; prepare loop:
 	; for (uint8_t i = 0, uint8_t* p = buffer; i < buffer.Length; i++, p++)
 	mov r1, #0							; uint8_t i = 0;
-	mov r0, TEMPERATURE_RING_BUFFER		; uint8_t* p = buffer;
+	mov r0, #50h		; uint8_t* p = buffer;
 __Temperature_CalculateAverage_LoopHeader:
-	mov a, TEMPERATURE_RING_BUFFER_SIZE	; load ring buffer size to a
+	mov a, #10d	; load ring buffer size to a
 	xrl a, r1							; i < buffer.Length
 	jz __Temperature_CalculateAverage_LoopBreak
 	mov a, @r0							; element = *p;
 	; sum += element;
-	add a, TEMPERATURE_SUM_LOW			; temp = element + sum.low 
-	mov TEMPERATURE_SUM_LOW, a			; sum.low = temp
+	add a, 5Eh			; temp = element + sum.low 
+	mov 5Eh, a			; sum.low = temp
 	mov a, #0
-	addc a, TEMPERATURE_SUM_HIGH		; temp = carry + sum.high
-	mov TEMPERATURE_SUM_HIGH, a			; sum.high = temp
+	addc a, 5Fh		; temp = carry + sum.high
+	mov 5Fh, a			; sum.high = temp
 	inc r1								; i++;
 	inc r0								; p++;
 	jmp __Temperature_CalculateAverage_LoopHeader
@@ -732,27 +621,27 @@ __Temperature_CalculateAverage_LoopBreak:
 	; we now have the sum of all elements in the buffer in sum.low and sum.high
 	; calculate average (divide sum by number of elements, divide by 10)
 	lcall Temperature_16BitDivideBy10
-	pop DIRECT_R1						; pop new average value into r1
-	mov r0, TEMPERATURE_AVERAGE			; load old average to r0
+	pop 01h						; pop new average value into r1
+	mov r0, 5Bh			; load old average to r0
 	; calculate temperature drift (old average vs new average)
 	; result goes in r5
-	mov r5, TEMPERATURE_DRIFT_STEADY	; assume steady drift (old average == new average)
+	mov r5, #ffh	; assume steady drift (old average == new average)
 	mov a, r0							; load old average to a
 	xrl a, r1							; compare old average to new average
 	jz __Temperature_CalculateAverage_End
 	; new average is different from old average, so determine temperature drift
-	mov r5, TEMPERATURE_DRIFT_RISING	; assume rising drift
+	mov r5, #1d	; assume rising drift
 	mov a, r0							; load old average to a
 	clr c								; clear carry
 	subb a, r1							; a = old average - new average
 	jz __Temperature_CalculateAverage_End
 	; new average is lower than old average.
-	mov r5, TEMPERATURE_DRIFT_FALLING
+	mov r5, #0d
 __Temperature_CalculateAverage_End:
 	; we know the new average and the new temperature drift.
 	; -> update the average and drift variables
-	mov TEMPERATURE_AVERAGE, r1			; update average
-	mov TEMPERATURE_DRIFT, r5			; update drift
+	mov 5Bh, r1			; update average
+	mov 5Ch, r5			; update drift
 	ret
 
 ; divides the temperature sum by 10 to produce the average temperature
@@ -781,20 +670,20 @@ __Temperature_DivideBy10_LoopHeader:
 	djnz r0, __Temperature_DivideBy10_Loop
 	ljmp __Temperature_DivideBy10_LoopBreak
 __Temperature_DivideBy10_Loop:
-	mov a, UINT32_03		; load upper byte of the two upper bytes of intermediate_result to a
+	mov a, 34h		; load upper byte of the two upper bytes of intermediate_result to a
 	clr c					; clear carry flag
 	rrc a					; rotate right through carry
-	mov UINT32_03, a		; store upper byte back to byte 3 of UINT32_0
+	mov 34h, a		; store upper byte back to byte 3 of UINT32_0
 
-	mov a, UINT32_02		; load lower byte of the two upper bytes of intermediate_result to a
+	mov a, 33h		; load lower byte of the two upper bytes of intermediate_result to a
 	; don't clear carry flag, we need to treat this as the lower byte of an uint16_t.
 	rrc a					; rotate right through carry
-	mov UINT32_02, a		; store lower byte back to byte 2 of UINT32_0
+	mov 33h, a		; store lower byte back to byte 2 of UINT32_0
 __Temperature_DivideBy10_LoopBreak:
 	; we did it :)
 	; we also know that the average of uint8_t's will always be less than 0x100, so we can just
 	; grab the lower byte of the upper two bytes of UINT32_0 and return it (byte 2).
-	push UINT32_02			; push average temperature to stack
+	push 33h			; push average temperature to stack
 	ret
 
 ; multiplies the temperature sum by 0xcccd and returns the result in UINT32_0.
@@ -813,74 +702,74 @@ Temperature_MultiplySumBy0xcccd:
 	; load uint16_t temperature sum to uint32_t "UINT32_0"
 	; accumulate = sum;
 	; low byte of sum to byte 0 (low byte) of UINT32_0
-	mov UINT32_00, TEMPERATURE_SUM_LOW
+	mov 31h, 5Eh
 	; high byte of sum to byte 1 of UINT32_0
-	mov UINT32_01, TEMPERATURE_SUM_HIGH
+	mov 32h, 5Fh
 	; clear high bytes of UINT32_0
-	mov UINT32_02, #0
-	mov UINT32_03, #0
+	mov 33h, #0
+	mov 34h, #0
 	; accumulate += (sum << 2);	
 	lcall Temperature_LoadSumToUINT32_1
-	mov r0, UINT32_1_PTR
-	push DIRECT_R0						; push (uint32_t*)&UINT32_1 to stack
+	mov r0, #35h
+	push 00h						; push (uint32_t*)&UINT32_1 to stack
 	mov r0, #2d
-	push DIRECT_R0						; push 2d to stack
+	push 00h						; push 2d to stack
 	lcall ShiftLeft32					; sum << 2 to UINT32_1
 	lcall Add32
 	; accumulate += (sum << 3);
 	lcall Temperature_LoadSumToUINT32_1
-	mov r0, UINT32_1_PTR
-	push DIRECT_R0						; push (uint32_t*)&UINT32_1 to stack
+	mov r0, #35h
+	push 00h						; push (uint32_t*)&UINT32_1 to stack
 	mov r0, #3d
-	push DIRECT_R0						; push 3d to stack
+	push 00h						; push 3d to stack
 	lcall ShiftLeft32					; sum << 3 to UINT32_1
 	lcall Add32
 	; accumulate += (sum << 6);
 	lcall Temperature_LoadSumToUINT32_1
-	mov r0, UINT32_1_PTR
-	push DIRECT_R0						; push (uint32_t*)&UINT32_1 to stack
+	mov r0, #35h
+	push 00h						; push (uint32_t*)&UINT32_1 to stack
 	mov r0, #6d
-	push DIRECT_R0						; push 6d to stack
+	push 00h						; push 6d to stack
 	lcall ShiftLeft32					; sum << 6 to UINT32_1
 	lcall Add32
 	; accumulate += (sum << 7);
 	lcall Temperature_LoadSumToUINT32_1
-	mov r0, UINT32_1_PTR
-	push DIRECT_R0						; push (uint32_t*)&UINT32_1 to stack
+	mov r0, #35h
+	push 00h						; push (uint32_t*)&UINT32_1 to stack
 	mov r0, #7d
-	push DIRECT_R0						; push 7d to stack
+	push 00h						; push 7d to stack
 	lcall ShiftLeft32					; sum << 7 to UINT32_1
 	lcall Add32
 	; accumulate += (sum << 10);
 	lcall Temperature_LoadSumToUINT32_1
-	mov r0, UINT32_1_PTR
-	push DIRECT_R0						; push (uint32_t*)&UINT32_1 to stack
+	mov r0, #35h
+	push 00h						; push (uint32_t*)&UINT32_1 to stack
 	mov r0, #10d
-	push DIRECT_R0						; push 10d to stack
+	push 00h						; push 10d to stack
 	lcall ShiftLeft32					; sum << 10 to UINT32_1
 	lcall Add32
 	; accumulate += (sum << 11);
 	lcall Temperature_LoadSumToUINT32_1
-	mov r0, UINT32_1_PTR
-	push DIRECT_R0						; push (uint32_t*)&UINT32_1 to stack
+	mov r0, #35h
+	push 00h						; push (uint32_t*)&UINT32_1 to stack
 	mov r0, #11d
-	push DIRECT_R0						; push 11d to stack
+	push 00h						; push 11d to stack
 	lcall ShiftLeft32					; sum << 11 to UINT32_1
 	lcall Add32
 	; accumulate += (sum << 14);
 	lcall Temperature_LoadSumToUINT32_1
-	mov r0, UINT32_1_PTR
-	push DIRECT_R0						; push (uint32_t*)&UINT32_1 to stack
+	mov r0, #35h
+	push 00h						; push (uint32_t*)&UINT32_1 to stack
 	mov r0, #14d
-	push DIRECT_R0						; push 14d to stack
+	push 00h						; push 14d to stack
 	lcall ShiftLeft32					; sum << 14 to UINT32_1
 	lcall Add32
 	; accumulate += (sum << 15);
 	lcall Temperature_LoadSumToUINT32_1
-	mov r0, UINT32_1_PTR
-	push DIRECT_R0						; push (uint32_t*)&UINT32_1 to stack
+	mov r0, #35h
+	push 00h						; push (uint32_t*)&UINT32_1 to stack
 	mov r0, #15d
-	push DIRECT_R0						; push 15d to stack
+	push 00h						; push 15d to stack
 	lcall ShiftLeft32					; sum << 15 to UINT32_1
 	lcall Add32
 	; ez done :)
@@ -889,12 +778,12 @@ Temperature_MultiplySumBy0xcccd:
 ; loads and expands uint16_t temperature sum to uint32_t UINT32_1 register
 Temperature_LoadSumToUINT32_1:
 	; low byte of sum to byte 0 (low byte) of UINT32_1
-	mov UINT32_10, TEMPERATURE_SUM_LOW
+	mov 35h, 5Eh
 	; high byte of sum to byte 1 of UINT32_1
-	mov UINT32_11, TEMPERATURE_SUM_HIGH
+	mov 36h, 5Fh
 	; clear high bytes of UINT32_1
-	mov UINT32_12, #0
-	mov UINT32_13, #0
+	mov 37h, #0
+	mov 38h, #0
 	ret
 
 ; ============================================================================
