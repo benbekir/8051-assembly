@@ -104,6 +104,22 @@
 #DEFINE TEMPERATURE_DRIFT_STEADY		#ffh
 
 ; ============================================================================
+
+; SORT
+; constants
+#DEFINE SORT_TRUE 		#ffh
+#DEFINE SORT_FALSE		#00h
+
+; variable registers
+#DEFINE SORT_SWAPPED	b
+#DEFINE SORT_I_HIGH		r6
+#DEFINE SORT_I_LOW		r5
+#DEFINE SORT_J_HIGH		r4
+#DEFINE SORT_J_LOW		r3
+#DEFINE SORT_CURRENT	r2
+#DEFINE SORT_PREVIOUS	r1
+
+; ============================================================================
 ; <!-------------------- NO DEFINITIONS BELOW THIS LINE -------------------->
 ; ============================================================================
 
@@ -912,7 +928,135 @@ Temperature_LoadSumToUINT32_1:
 ; ============================================================================
 ; sorts the array of uin8_t values in XRAM
 
+; (from https://en.wikipedia.org/wiki/Bubble_sort)
+; procedure bubbleSort(A : list of sortable items)
+;     n := length(A)
+;     repeat
+;         swapped := false
+;         for i := 1 to n-1 inclusive do
+;             /* if this pair is out of order */
+;             if A[i-1] > A[i] then
+;                 /* swap them and remember something changed */
+;                 swap(A[i-1], A[i])
+;                 swapped := true
+;             end if
+;         end for
+;     until not swapped
+; end procedure
+
+; adaptation:
+; void Sort_BubbleSort() 
+;{
+;	uint8_t swapped = 0xff; b <=> swapped
+;	; outer_loop:
+;	while (swapped != 0)	; jz outer_break :)
+;	{
+;		swapped = 0x00;
+;		uint16_t i = 1; r5 (low), r6 (high) <=> i
+;		; inner_loop:
+;		while (i != 0xffff) ; (i_h ^ 0xff) | (i_l ^ 0xff) == 0 => jz inner_break :)
+;		{
+;			; if this pair is out of order
+;			uint16_t j = i - 1; r3 (low), r4 (high) <=> j
+;			uint8_t current = XRAM[i]; r2 <=> current
+;			uint8_t previous = XRAM[j]; r1 <=> previous
+;			if (current - previous < 0)	; previous > current => jnc continue
+;			{
+;				; swap them and remember something changed
+;				XRAM[j] = current; r1 <=> XRAM[j]
+;				XRAM[i] = previous; r2 <=> XRAM[i]
+;				swapped = 0xff;	
+;			}
+;			; continue:
+;			i++;
+;			; ljmp inner_loop
+;		}
+;		; inner_break:
+;		; ljmp outer_loop
+;	}; outer_break:
+;}
+
+; r7 unused / temp storage buffer
+; r6 i high
+; r5 i low
+; r4 j high
+; r3 j low
+; r2 current value
+; r1 previous value
+; r0 RESERVED (for XRAM load/store)
+; b swapped (0x00 = no, 0xff = yes)
+
 ; called only once, when the program starts
 Sort_Notify:
-	; TODO
+	mov SORT_SWAPPED, SORT_TRUE		; uint8_t swapped = 0xff;
+__Sort_Notify_OuterLoop:
+	; while (swapped != 0)
+	mov a, SORT_SWAPPED
+	jz __Sort_Notify_OuterBreak
+	mov SORT_SWAPPED, SORT_FALSE	; swapped = 0x00;
+	; uint16_t i = 1;
+	mov SORT_I_LOW, #1				;  r5 (i low)
+	mov SORT_I_HIGH, #0				;  r6 (i high)
+__Sort_Notify_InnerLoop:
+	; while (i != 0xffff)
+	; (i_h ^ 0xff) | (i_l ^ 0xff) == 0 => jz inner_break :)
+	mov a, SORT_I_LOW
+	xrl a, #ffh
+	mov r7, a
+	mov a, SORT_I_HIGH
+	xrl a, #ffh
+	orl a, r7
+	jz __Sort_Notify_InnerBreak
+	; uint16_t j = i - 1;
+	clr c					; clear carry flag
+	mov a, SORT_I_LOW		; load i low
+	subb a, #1				; a = i - 1
+	mov SORT_J_LOW, a		; write j low
+	mov a, SORT_I_HIGH		; load i high
+	subb a, #0				; handle carry flag
+	mov SORT_J_HIGH, a		; write j high
+	; uint8_t current = XRAM[i];
+	mov a, SORT_I_LOW		; load i low
+	mov r0, a				; i low to XRAM low address
+	mov p2, SORT_I_HIGH		; i high to XRAM high address
+	movx a, @r0				; load current value
+	mov SORT_CURRENT, a		; write current value
+	; uint8_t previous = XRAM[j];
+	mov a, SORT_J_LOW		; load j low
+	mov r0, a				; j low to XRAM low address
+	mov p2, SORT_J_HIGH		; j high to XRAM high address
+	movx a, @r0				; load previous value
+	mov SORT_PREVIOUS, a	; write previous value
+	; if (current - previous < 0) same as previous > current => jnc continue
+	mov a, SORT_CURRENT
+	clr c					; clear carry flag
+	subb a, SORT_PREVIOUS	; a = current - previous
+	jnc __Sort_Notify_Continue
+	; swap current and previous and remember something changed
+	; j is previous, i is current
+	; previous is still loaded as XRAM address
+	mov a, SORT_CURRENT		; load current value
+	movx @r0, a				; write current value to previous location
+	mov a, SORT_I_LOW		; load i low
+	mov r0, a				; i low to XRAM low address
+	mov p2, SORT_I_HIGH		; i high to XRAM high address
+	mov a, SORT_PREVIOUS	; load previous value
+	movx @r0, a				; write previous value to current location
+	; remember we swapped something (swapped = 0xff);
+	mov SORT_SWAPPED, SORT_TRUE	
+__Sort_Notify_Continue:
+	; i++
+	clr c					; clear carry flag
+	mov a, SORT_I_LOW		; load i low
+	add a, #1				; a = i + 1
+	mov SORT_I_LOW, a		; write i low
+	mov a, SORT_I_HIGH		; load i high
+	addc a, #0				; handle overflow
+	mov SORT_I_HIGH, a		; write i high
+	; inner loop
+	ljmp __Sort_Notify_InnerLoop
+__Sort_Notify_InnerBreak:
+	; outer loop
+	ljmp __Sort_Notify_OuterLoop
+__Sort_Notify_OuterBreak:
 	ret
