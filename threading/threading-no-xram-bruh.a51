@@ -113,18 +113,18 @@
 
 ; variable registers
 #DEFINE SORT_SWAPPED	b
-#DEFINE SORT_I_HIGH		r6
-#DEFINE SORT_I_LOW		r5
-#DEFINE SORT_J_HIGH		r4
-#DEFINE SORT_J_LOW		r3
-#DEFINE SORT_CURRENT	r2
-#DEFINE SORT_PREVIOUS	r1
+#DEFINE SORT_I_HIGH		r5
+#DEFINE SORT_I_LOW		r4
+#DEFINE SORT_J_HIGH		r3
+#DEFINE SORT_J_LOW		r2
+#DEFINE SORT_CURRENT	r1
+#DEFINE SORT_PREVIOUS	r0
 
 ; recursive direct address mode definition for variable i
 ; must be able to move register to register
-#DEFINE SORT_I_LOW_DIRECT DIRECT_R5
-#DEFINE SORT_I_HIGH_DIRECT DIRECT_R6
-#DEFINE SORT_CURRENT_DIRECT DIRECT_R2
+#DEFINE SORT_I_LOW_DIRECT DIRECT_R4
+#DEFINE SORT_I_HIGH_DIRECT DIRECT_R5
+#DEFINE SORT_CURRENT_DIRECT DIRECT_R1
 
 ; ============================================================================
 ; <!-------------------- NO DEFINITIONS BELOW THIS LINE -------------------->
@@ -189,9 +189,9 @@ Initialize:
 	mov TH0, # 06h    ; Reloadwert
 
 	; Interrupts
-	;setb ET0    ; Timer 0 Interrupt freigeben
-	;setb EA    ; globale Interruptfreigabe
-	;setb TR0    ; Timer 0 l�uft.
+	setb ET0    ; Timer 0 Interrupt freigeben
+	setb EA    ; globale Interruptfreigabe
+	setb TR0    ; Timer 0 l�uft.
 
 	; initialize clock
 	lcall Clock_Init
@@ -996,8 +996,8 @@ Temperature_LoadSumToUINT32_1:
 ; r3 j low
 ; r2 current value
 ; r1 previous value
-; r0 RESERVED (for XRAM load/store)
-; b swapped (0x00 = no, 0xff = yes)
+; r0 unused
+; b swapped (0x00 = false, 0xff = true)
 
 ; called only once, when the program starts
 Sort_Notify:
