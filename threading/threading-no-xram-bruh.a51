@@ -50,9 +50,8 @@
 #DEFINE SWAP_R5			6Fh
 #DEFINE SWAP_R6			70h
 #DEFINE SWAP_R7			71h
-#DEFINE SWAP_PSW		72h
-; port 2 conflicts between XRAM access and temperature sensor
-#DEFINE SWAP_P2			73h
+#DEFINE SWAP_DPL		72h
+#DEFINE SWAP_DPH		73h
 
 #DEFINE SWAP_UINT32_00	74h
 #DEFINE SWAP_UINT32_01	75h
@@ -63,6 +62,8 @@
 #DEFINE SWAP_UINT32_11	79h
 #DEFINE SWAP_UINT32_12	7Ah
 #DEFINE SWAP_UINT32_13	7Bh
+
+#DEFINE SWAP_PSW		7Ch
 
 ; ============================================================================
 
@@ -102,6 +103,28 @@
 #DEFINE TEMPERATURE_DRIFT_FALLING		#0d
 #DEFINE TEMPERATURE_DRIFT_RISING		#1d
 #DEFINE TEMPERATURE_DRIFT_STEADY		#ffh
+
+; ============================================================================
+
+; SORT
+; constants
+#DEFINE SORT_TRUE 		#ffh
+#DEFINE SORT_FALSE		#00h
+
+; variable registers
+#DEFINE SORT_SWAPPED	b
+#DEFINE SORT_I_HIGH		r5
+#DEFINE SORT_I_LOW		r4
+#DEFINE SORT_J_HIGH		r3
+#DEFINE SORT_J_LOW		r2
+#DEFINE SORT_CURRENT	r1
+#DEFINE SORT_PREVIOUS	r0
+
+; recursive direct address mode definition for variable i
+; must be able to move register to register
+#DEFINE SORT_I_LOW_DIRECT DIRECT_R4
+#DEFINE SORT_I_HIGH_DIRECT DIRECT_R5
+#DEFINE SORT_CURRENT_DIRECT DIRECT_R1
 
 ; ============================================================================
 ; <!-------------------- NO DEFINITIONS BELOW THIS LINE -------------------->
@@ -222,7 +245,9 @@ EXC_STORE:
 	mov SWAP_R5, r5
 	mov SWAP_R6, r6
 	mov SWAP_R7, r7
-	mov SWAP_P2, p2
+	; store dptr
+	mov SWAP_DPL, dpl
+	mov SWAP_DPH, dph
 	; store UINT32_0
 	mov SWAP_UINT32_00, UINT32_00
 	mov SWAP_UINT32_01, UINT32_01
@@ -247,7 +272,9 @@ EXC_RESTORE:
 	mov UINT32_02, SWAP_UINT32_02
 	mov UINT32_01, SWAP_UINT32_01
 	mov UINT32_00, SWAP_UINT32_00
-	mov p2, SWAP_P2
+	; restore dptr
+	mov dph, SWAP_DPH
+	mov dpl, SWAP_DPL
 	mov r7, SWAP_R7
 	mov r6, SWAP_R6
 	mov r5, SWAP_R5
@@ -912,7 +939,135 @@ Temperature_LoadSumToUINT32_1:
 ; ============================================================================
 ; sorts the array of uin8_t values in XRAM
 
+; (from https://en.wikipedia.org/wiki/Bubble_sort)
+; procedure bubbleSort(A : list of sortable items)
+;     n := length(A)
+;     repeat
+;         swapped := false
+;         for i := 1 to n-1 inclusive do
+;             /* if this pair is out of order */
+;             if A[i-1] > A[i] then
+;                 /* swap them and remember something changed */
+;                 swap(A[i-1], A[i])
+;                 swapped := true
+;             end if
+;         end for
+;     until not swapped
+; end procedure
+
+; our adaptation:
+;void Bubblesort(uint8_t *array, uint16_t length)
+;{
+;	uint8_t swapped = true;
+;	while (swapped != false)
+;	{
+;		swapped = false;
+;		uint16_t i = 1;
+;		uint16_t j = i - 1;
+;		uint8_t previous = array[j];
+;		while (j != length)
+;		{
+;			uint8_t current = array[i];
+;			if (current - previous < 0)
+;			{
+;				array[i] = previous;
+;				array[j] = current;
+;				swapped = true;
+;			}
+;			else
+;			{
+;				previous = current;
+;			}
+;			j = i;
+;			i++;
+;		}
+;	}
+;}
+
+; r7 unused / temp storage buffer
+; r6 i high
+; r5 i low
+; r4 j high
+; r3 j low
+; r2 current value
+; r1 previous value
+; r0 unused
+; b swapped (0x00 = false, 0xff = true)
+
 ; called only once, when the program starts
 Sort_Notify:
-	; TODO
+	mov SORT_SWAPPED, SORT_TRUE		; uint8_t swapped = true;
+__Sort_Notify_OuterLoop:
+	; while (swapped != false)
+	mov a, SORT_SWAPPED
+	jz __Sort_Notify_OuterBreak
+	mov SORT_SWAPPED, SORT_FALSE	; swapped = false;
+	; uint16_t i = 1;
+	mov SORT_I_LOW, #1				;  r5 (i low)
+	mov SORT_I_HIGH, #0				;  r6 (i high)
+	mov dptr, #0					;  DPTR = 0x0; (DPTR is previous value)
+	; uint16_t j = i - 1; (or j = DPTR)
+	mov SORT_J_LOW, dpl				; DP low to j low
+	mov SORT_J_HIGH, dph			; DP high to j high
+	; load initial value for previous variable
+	movx a, @dptr					; load previous value (from dptr)
+	mov SORT_PREVIOUS, a			; store previous value
+__Sort_Notify_InnerLoop:
+	; while (i - 1 != 0xffff) (upper bound is inclusive! => check for j != 0xffff)
+	; (j_h ^ 0xff) | (j_l ^ 0xff) == 0 => jz inner_break :)
+	mov a, SORT_J_HIGH
+	xrl a, #ffh
+	mov r7, a
+	mov a, SORT_J_LOW
+	xrl a, #ffh
+	orl a, r7
+	jz __Sort_Notify_InnerBreak
+	; previous is already loaded in loop init and increment 
+	; uint8_t current = XRAM[i];
+	; remember i = j + 1
+	inc dptr				; increment dptr
+	movx a, @dptr			; load current value
+	mov SORT_CURRENT, a		; store current value
+	; if (current - previous < 0) same as previous > current => jnc continue
+	clr c					; clear carry flag
+	subb a, SORT_PREVIOUS	; a = current - previous
+	jnc __Sort_Notify_NoSwap
+	; swap current and previous and remember something changed
+	; j is previous, i is current
+	; previous is still loaded as XRAM address
+	mov a, SORT_PREVIOUS	; load previous value
+	movx @dptr, a			; write previous value to current location
+	mov dpl, SORT_J_LOW		; load j low to dpl
+	mov dph, SORT_J_HIGH	; load j high to dph
+	mov a, SORT_CURRENT		; load current value
+	movx @dptr, a			; write current value to previous location
+	; remember we swapped something (swapped = true);
+	mov SORT_SWAPPED, SORT_TRUE	
+	ljmp __Sort_Notify_Continue
+__Sort_Notify_NoSwap:
+	; if we didn't swap anything, we need to update the previous value
+	; if we swapped something, the previous value remains the same
+	mov SORT_PREVIOUS, SORT_CURRENT_DIRECT
+__Sort_Notify_Continue:
+	; j = i via direct addressing;
+	mov SORT_J_LOW, SORT_I_LOW_DIRECT
+	mov SORT_J_HIGH, SORT_I_HIGH_DIRECT
+	; set dptr = i
+	mov dpl, SORT_I_LOW
+	mov dph, SORT_I_HIGH
+	; i++
+	inc dptr
+	; dptr is now i + 1
+	; i = dptr;
+	mov SORT_I_LOW, dpl
+	mov SORT_I_HIGH, dph
+	; restore dptr from j (dptr == j == i - 1)
+	mov dpl, SORT_J_LOW
+	mov dph, SORT_J_HIGH
+	; inner loop
+	ljmp __Sort_Notify_InnerLoop
+__Sort_Notify_InnerBreak:
+	; outer loop
+	ljmp __Sort_Notify_OuterLoop
+__Sort_Notify_OuterBreak:
 	ret

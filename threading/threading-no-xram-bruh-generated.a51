@@ -99,7 +99,7 @@ ResetTicks:
 
 ; stores the execution context in the swap area
 EXC_STORE:
-	mov 72h, psw
+	mov 7Ch, psw
 	mov 68h, a
 	mov 69h, b
 	mov 6Ah, r0
@@ -110,7 +110,9 @@ EXC_STORE:
 	mov 6Fh, r5
 	mov 70h, r6
 	mov 71h, r7
-	mov 73h, p2
+	; store dptr
+	mov 72h, dpl
+	mov 73h, dph
 	; store UINT32_0
 	mov 74h, 30h
 	mov 75h, 31h
@@ -135,7 +137,9 @@ EXC_RESTORE:
 	mov 32h, 76h
 	mov 31h, 75h
 	mov 30h, 74h
-	mov p2, 73h
+	; restore dptr
+	mov dph, 73h
+	mov dpl, 72h
 	mov r7, 71h
 	mov r6, 70h
 	mov r5, 6Fh
@@ -146,7 +150,7 @@ EXC_RESTORE:
 	mov r0, 6Ah
 	mov b, 69h
 	mov a, 68h
-	mov psw, 72h
+	mov psw, 7Ch
 	ret
 
 ; modifies a, b, r0-r3
@@ -566,7 +570,7 @@ __Temperature_NotifyEnd:
 
 Temperature_ResetTicks:
 	; reset temperature ticks
-	mov 5Ah, #01d	
+	mov 5Ah, #10d	
 	ret
 
 ; reads the temperature from port 2.
@@ -800,7 +804,135 @@ Temperature_LoadSumToUINT32_1:
 ; ============================================================================
 ; sorts the array of uin8_t values in XRAM
 
+; (from https://en.wikipedia.org/wiki/Bubble_sort)
+; procedure bubbleSort(A : list of sortable items)
+;     n := length(A)
+;     repeat
+;         swapped := false
+;         for i := 1 to n-1 inclusive do
+;             /* if this pair is out of order */
+;             if A[i-1] > A[i] then
+;                 /* swap them and remember something changed */
+;                 swap(A[i-1], A[i])
+;                 swapped := true
+;             end if
+;         end for
+;     until not swapped
+; end procedure
+
+; our adaptation:
+;void Bubblesort(uint8_t *array, uint16_t length)
+;{
+;	uint8_t swapped = true;
+;	while (swapped != false)
+;	{
+;		swapped = false;
+;		uint16_t i = 1;
+;		uint16_t j = i - 1;
+;		uint8_t previous = array[j];
+;		while (j != length)
+;		{
+;			uint8_t current = array[i];
+;			if (current - previous < 0)
+;			{
+;				array[i] = previous;
+;				array[j] = current;
+;				swapped = true;
+;			}
+;			else
+;			{
+;				previous = current;
+;			}
+;			j = i;
+;			i++;
+;		}
+;	}
+;}
+
+; r7 unused / temp storage buffer
+; r6 i high
+; r5 i low
+; r4 j high
+; r3 j low
+; r2 current value
+; r1 previous value
+; r0 unused
+; b swapped (0x00 = false, 0xff = true)
+
 ; called only once, when the program starts
 Sort_Notify:
-	; TODO
+	mov b, #ffh		; uint8_t swapped = true;
+__Sort_Notify_OuterLoop:
+	; while (swapped != false)
+	mov a, b
+	jz __Sort_Notify_OuterBreak
+	mov b, #00h	; swapped = false;
+	; uint16_t i = 1;
+	mov r4, #1				;  r5 (i low)
+	mov r5, #0				;  r6 (i high)
+	mov dptr, #0					;  DPTR = 0x0; (DPTR is previous value)
+	; uint16_t j = i - 1; (or j = DPTR)
+	mov r2, dpl				; DP low to j low
+	mov r3, dph			; DP high to j high
+	; load initial value for previous variable
+	movx a, @dptr					; load previous value (from dptr)
+	mov r0, a			; store previous value
+__Sort_Notify_InnerLoop:
+	; while (i - 1 != 0xffff) (upper bound is inclusive! => check for j != 0xffff)
+	; (j_h ^ 0xff) | (j_l ^ 0xff) == 0 => jz inner_break :)
+	mov a, r3
+	xrl a, #ffh
+	mov r7, a
+	mov a, r2
+	xrl a, #ffh
+	orl a, r7
+	jz __Sort_Notify_InnerBreak
+	; previous is already loaded in loop init and increment 
+	; uint8_t current = XRAM[i];
+	; remember i = j + 1
+	inc dptr				; increment dptr
+	movx a, @dptr			; load current value
+	mov r1, a		; store current value
+	; if (current - previous < 0) same as previous > current => jnc continue
+	clr c					; clear carry flag
+	subb a, r0	; a = current - previous
+	jnc __Sort_Notify_NoSwap
+	; swap current and previous and remember something changed
+	; j is previous, i is current
+	; previous is still loaded as XRAM address
+	mov a, r0	; load previous value
+	movx @dptr, a			; write previous value to current location
+	mov dpl, r2		; load j low to dpl
+	mov dph, r3	; load j high to dph
+	mov a, r1		; load current value
+	movx @dptr, a			; write current value to previous location
+	; remember we swapped something (swapped = true);
+	mov b, #ffh	
+	ljmp __Sort_Notify_Continue
+__Sort_Notify_NoSwap:
+	; if we didn't swap anything, we need to update the previous value
+	; if we swapped something, the previous value remains the same
+	mov r0, 01h
+__Sort_Notify_Continue:
+	; j = i via direct addressing;
+	mov r2, 04h
+	mov r3, 05h
+	; set dptr = i
+	mov dpl, r4
+	mov dph, r5
+	; i++
+	inc dptr
+	; dptr is now i + 1
+	; i = dptr;
+	mov r4, dpl
+	mov r5, dph
+	; restore dptr from j (dptr == j == i - 1)
+	mov dpl, r2
+	mov dph, r3
+	; inner loop
+	ljmp __Sort_Notify_InnerLoop
+__Sort_Notify_InnerBreak:
+	; outer loop
+	ljmp __Sort_Notify_OuterLoop
+__Sort_Notify_OuterBreak:
 	ret
