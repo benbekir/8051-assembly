@@ -955,38 +955,33 @@ Temperature_LoadSumToUINT32_1:
 ;     until not swapped
 ; end procedure
 
-; adaptation:
-; void Sort_BubbleSort() 
+; our adaptation:
+;void Bubblesort(uint8_t *array, uint16_t length)
 ;{
-;	uint8_t swapped = 0xff; b <=> swapped
-;	; outer_loop:
-;	while (swapped != 0)	; jz outer_break :)
+;	uint8_t swapped = true;
+;	while (swapped != false)
 ;	{
-;		swapped = 0x00;
-;		uint16_t i = 1; r5 (low), r6 (high) <=> i; DPTR = 0x0; (DPTR is previous value)
-;		; inner_loop:
-;		while (i != 0xffff) ; (i_h ^ 0xff) | (i_l ^ 0xff) == 0 => jz inner_break :)
+;		swapped = false;
+;		uint16_t i = 1;
+;		uint16_t j = i - 1;
+;		uint8_t previous = array[j];
+;		while (j != length)
 ;		{
-;			; if this pair is out of order
-;			uint16_t j = DPTR; r3 (low), r4 (high) <=> j
-;			uint8_t previous = XRAM[j]; r1 <=> previous; movx a, @DPTR; inc DPTR;
-;			i = DPTR;
-;			uint8_t current = XRAM[i]; r2 <=> current; movx a, @DPTR; 
-;			if (current - previous < 0)	; previous > current => jnc continue
+;			uint8_t current = array[i];
+;			if (current - previous < 0)
 ;			{
-;				; swap them and remember something changed
-;				XRAM[i] = previous; r2 <=> XRAM[i] 	; movx @DPTR, a; load dph / dph from j
-;				XRAM[j] = current; r1 <=> XRAM[j]	; movx @DPTR, a; 
-;				swapped = 0xff;	
+;				array[i] = previous;
+;				array[j] = current;
+;				swapped = true;
 ;			}
-;			; continue:
+;			else
+;			{
+;				previous = current;
+;			}
+;			j = i;
 ;			i++;
-; 			inc DPTR;
-;			; ljmp inner_loop
 ;		}
-;		; inner_break:
-;		; ljmp outer_loop
-;	}; outer_break:
+;	}
 ;}
 
 ; r7 unused / temp storage buffer
@@ -1021,7 +1016,7 @@ __Sort_Notify_InnerLoop:
 	; while (i - 1 != 0xffff) (upper bound is inclusive! => check for j != 0xffff)
 	; (j_h ^ 0xff) | (j_l ^ 0xff) == 0 => jz inner_break :)
 	mov a, SORT_J_HIGH
-	xrl a, #00h; #ffh TODO: TEST ONLY!!! plz revert!
+	xrl a, #ffh
 	mov r7, a
 	mov a, SORT_J_LOW
 	xrl a, #ffh
