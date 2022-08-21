@@ -54,9 +54,9 @@ Initialize:
 	mov TH0, # 06h    ; Reloadwert
 
 	; Interrupts
-	setb ET0    ; Timer 0 Interrupt freigeben
-	setb EA    ; globale Interruptfreigabe
-	setb TR0    ; Timer 0 l�uft.
+	;setb ET0    ; Timer 0 Interrupt freigeben
+	;setb EA    ; globale Interruptfreigabe
+	;setb TR0    ; Timer 0 l�uft.
 
 	; initialize clock
 	lcall Clock_Init
@@ -99,7 +99,7 @@ ResetTicks:
 
 ; stores the execution context in the swap area
 EXC_STORE:
-	mov 72h, psw
+	mov 7Ch, psw
 	mov 68h, a
 	mov 69h, b
 	mov 6Ah, r0
@@ -110,7 +110,9 @@ EXC_STORE:
 	mov 6Fh, r5
 	mov 70h, r6
 	mov 71h, r7
-	mov 73h, p2
+	; store dptr
+	mov 72h, dpl
+	mov 73h, dph
 	; store UINT32_0
 	mov 74h, 30h
 	mov 75h, 31h
@@ -135,7 +137,9 @@ EXC_RESTORE:
 	mov 32h, 76h
 	mov 31h, 75h
 	mov 30h, 74h
-	mov p2, 73h
+	; restore dptr
+	mov dph, 73h
+	mov dpl, 72h
 	mov r7, 71h
 	mov r6, 70h
 	mov r5, 6Fh
@@ -146,7 +150,7 @@ EXC_RESTORE:
 	mov r0, 6Ah
 	mov b, 69h
 	mov a, 68h
-	mov psw, 72h
+	mov psw, 7Ch
 	ret
 
 ; modifies a, b, r0-r3
@@ -824,23 +828,25 @@ Temperature_LoadSumToUINT32_1:
 ;	while (swapped != 0)	; jz outer_break :)
 ;	{
 ;		swapped = 0x00;
-;		uint16_t i = 1; r5 (low), r6 (high) <=> i
+;		uint16_t i = 1; r5 (low), r6 (high) <=> i; DPTR = 0x0; (DPTR is previous value)
 ;		; inner_loop:
 ;		while (i != 0xffff) ; (i_h ^ 0xff) | (i_l ^ 0xff) == 0 => jz inner_break :)
 ;		{
 ;			; if this pair is out of order
-;			uint16_t j = i - 1; r3 (low), r4 (high) <=> j
-;			uint8_t current = XRAM[i]; r2 <=> current
-;			uint8_t previous = XRAM[j]; r1 <=> previous
+;			uint16_t j = DPTR; r3 (low), r4 (high) <=> j
+;			uint8_t previous = XRAM[j]; r1 <=> previous; movx a, @DPTR; inc DPTR;
+;			i = DPTR;
+;			uint8_t current = XRAM[i]; r2 <=> current; movx a, @DPTR; 
 ;			if (current - previous < 0)	; previous > current => jnc continue
 ;			{
 ;				; swap them and remember something changed
-;				XRAM[j] = current; r1 <=> XRAM[j]
-;				XRAM[i] = previous; r2 <=> XRAM[i]
+;				XRAM[i] = previous; r2 <=> XRAM[i] 	; movx @DPTR, a; load dph / dph from j
+;				XRAM[j] = current; r1 <=> XRAM[j]	; movx @DPTR, a; 
 ;				swapped = 0xff;	
 ;			}
 ;			; continue:
 ;			i++;
+; 			inc DPTR;
 ;			; ljmp inner_loop
 ;		}
 ;		; inner_break:
@@ -848,7 +854,7 @@ Temperature_LoadSumToUINT32_1:
 ;	}; outer_break:
 ;}
 
-; r7 free
+; r7 unused / temp storage buffer
 ; r6 i high
 ; r5 i low
 ; r4 j high
@@ -856,74 +862,78 @@ Temperature_LoadSumToUINT32_1:
 ; r2 current value
 ; r1 previous value
 ; r0 RESERVED (for XRAM load/store)
+; b swapped (0x00 = no, 0xff = yes)
 
 ; called only once, when the program starts
 Sort_Notify:
-	mov b, #ffh		; uint8_t swapped = 0xff;
+	mov b, #ffh		; uint8_t swapped = true;
 __Sort_Notify_OuterLoop:
-	; while (swapped != 0)
+	; while (swapped != false)
 	mov a, b
 	jz __Sort_Notify_OuterBreak
-	mov b, #00h	; swapped = 0x00;
+	mov b, #00h	; swapped = false;
 	; uint16_t i = 1;
 	mov r5, #1				;  r5 (i low)
 	mov r6, #0				;  r6 (i high)
+	mov dptr, #0					;  DPTR = 0x0; (DPTR is previous value)
+	; uint16_t j = i - 1; (or j = DPTR)
+	mov r3, dpl				; DP low to j low
+	mov r4, dph			; DP high to j high
+	; load initial value for previous variable
+	movx a, @dptr					; load previous value (from dptr)
+	mov r1, a			; store previous value
 __Sort_Notify_InnerLoop:
-	; while (i != 0xffff)
-	; (i_h ^ 0xff) | (i_l ^ 0xff) == 0 => jz inner_break :)
-	mov a, r5
-	xrl a, #ffh
+	; while (i - 1 != 0xffff) (upper bound is inclusive! => check for j != 0xffff)
+	; (j_h ^ 0xff) | (j_l ^ 0xff) == 0 => jz inner_break :)
+	mov a, r4
+	xrl a, #00h; #ffh TODO: TEST ONLY!!! plz revert!
 	mov r7, a
-	mov a, r6
+	mov a, r3
 	xrl a, #ffh
 	orl a, r7
 	jz __Sort_Notify_InnerBreak
-	; uint16_t j = i - 1;
-	clr c					; clear carry flag
-	mov a, r5		; load i low
-	subb a, #1				; a = i - 1
-	mov r3, a		; write j low
-	mov a, r6		; load i high
-	subb a, #0				; handle carry flag
-	mov r4, a		; write j high
+	; previous is already loaded in loop init and increment 
 	; uint8_t current = XRAM[i];
-	mov a, r5		; load i low
-	mov r0, a				; i low to XRAM low address
-	mov p2, r6		; i high to XRAM high address
-	movx a, @r0				; load current value
-	mov r2, a		; write current value
-	; uint8_t previous = XRAM[j];
-	mov a, r3		; load j low
-	mov r0, a				; j low to XRAM low address
-	mov p2, r4		; j high to XRAM high address
-	movx a, @r0				; load previous value
-	mov r1, a	; write previous value
+	; remember i = j + 1
+	inc dptr				; increment dptr
+	movx a, @dptr			; load current value
+	mov r2, a		; store current value
 	; if (current - previous < 0) same as previous > current => jnc continue
-	mov a, r2
 	clr c					; clear carry flag
 	subb a, r1	; a = current - previous
-	jnc __Sort_Notify_Continue
+	jnc __Sort_Notify_NoSwap
 	; swap current and previous and remember something changed
 	; j is previous, i is current
 	; previous is still loaded as XRAM address
-	mov a, r2		; load current value
-	movx @r0, a				; write current value to previous location
-	mov a, r5		; load i low
-	mov r0, a				; i low to XRAM low address
-	mov p2, r6		; i high to XRAM high address
 	mov a, r1	; load previous value
-	movx @r0, a				; write previous value to current location
-	; remember we swapped something (swapped = 0xff);
+	movx @dptr, a			; write previous value to current location
+	mov dpl, r3		; load j low to dpl
+	mov dph, r4	; load j high to dph
+	mov a, r2		; load current value
+	movx @dptr, a			; write current value to previous location
+	; remember we swapped something (swapped = true);
 	mov b, #ffh	
+	ljmp __Sort_Notify_Continue
+__Sort_Notify_NoSwap:
+	; if we didn't swap anything, we need to update the previous value
+	; if we swapped something, the previous value remains the same
+	mov r1, 02h
 __Sort_Notify_Continue:
+	; j = i via direct addressing;
+	mov r3, 05h
+	mov r4, 06h
+	; set dptr = i
+	mov dpl, r5
+	mov dph, r6
 	; i++
-	clr c					; clear carry flag
-	mov a, r5		; load i low
-	add a, #1				; a = i + 1
-	mov r5, a		; write i low
-	mov a, r6		; load i high
-	addc a, #0				; handle overflow
-	mov r6, a		; write i high
+	inc dptr
+	; dptr is now i + 1
+	; i = dptr;
+	mov r5, dpl
+	mov r6, dph
+	; restore dptr from j (dptr == j == i - 1)
+	mov dpl, r3
+	mov dph, r4
 	; inner loop
 	ljmp __Sort_Notify_InnerLoop
 __Sort_Notify_InnerBreak:
