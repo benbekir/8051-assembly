@@ -381,7 +381,7 @@ __ShiftRight32_End:
 	ret
 
 ; adds the UINT32_0 to UINT32_1 and stores the result in UINT32_0
-; void ShiftRight32();
+; void Add32();
 Add32:
 	; byte 0
 	mov a, UINT32_00		; load byte 0 (low byte) of UINT32_0 to a
