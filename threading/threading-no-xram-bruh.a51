@@ -404,7 +404,7 @@ Add32:
 ; ============================================================================
 ; 									REACTION
 ; ============================================================================
-; reads the uin8_t value from port 1, does bound checking and returns the result in lowerst 2 bits in port 3
+; reads the uin8_t value from port 1, does bound checking and returns the result in lowest 2 bits in port 3
 ; Port 3: (XH, XL)
 ; 0,1: Wert < 100
 ; 1,1: Error (Wert == 100)
@@ -429,7 +429,7 @@ Reaction_Notify:
 	clr c
 	subb a, r0					; subtract value from 199
 	jnc __Reaction_NotifyEnd	; if no carry, value is <= 199
-	mov r1, #1h					; value is >= 200
+	mov r1, #2h					; value is >= 200
 __Reaction_NotifyEnd:
 	mov p3, r1					; store return value in port 3
 	ret
