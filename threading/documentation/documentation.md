@@ -6,6 +6,49 @@ export_on_save:
 
 # Scheduler
 
+## Reaction-Task (R-Task)
+
+Der Reaction-Task liest alle 10 ms den Wert aus Port 1 aus und schreibt basierend auf der Größenordnung einen festgelegten Wert in Port 3.
+
+|Speicheradresse|Information|
+| --- | --- |
+|Port 1|Der auszulesende Wert|
+|Port 3|Der berechnete Wert|
+
+Der Wert in Port 3 wird in den zwei least significant bits folgendermaßen gespeichert:
+
+|Wertebereiche (Port 1)|Resultat (Port 3 / XH, XL)|
+| --- | --- |
+|100<x<200|0, 0|
+|x$\geq$200|1, 0|
+|x<100|0, 1|
+|x=100 $\lor$ error|1, 1|
+
+### Tests
+
+Die Funktion des Reaktions-Tasks wird im folgenden durch Tests veranschaulicht und verifiziert:
+
+| Wert Port 1 | Wert Port 3 |
+|------|---|
+| 0    | 0x1	   |
+| 99    | 0x1 |
+| 100    | 0x3 |
+| 101    | 0x0 |
+| 150    | 0x0 |
+| 199    | 0x0 |
+| 200    | 0x2 |
+| 255    | 0x2 |
+
+## Berechnungs-Task (C-Task)
+
+Der Berechnungs-Task sortiert den gesamten externen RAM aufsteigend nach Größe.
+Benutzt wird der Bubble-Sort Algorithmus.
+
+### Tests
+
+Um die Funktion nachzuweisen, wurde ein Array mit 256 Werten sortiert.
+![](assets\xram-sorted.png)
+
 ## Thermometer
 
 Das Thermometer liest alle 10 Sekunden einen Wert aus Port 2 aus.
