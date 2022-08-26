@@ -56,7 +56,7 @@ Der Wert in Port 3 wird in den zwei least significant bits folgendermaßen gespe
 
 ### Tests
 
-Die Funktion des Reaktions-Tasks wird im folgenden durch Tests veranschaulicht und verifiziert:
+Die Funktion des Reaktions-Tasks wird im Folgenden durch Tests veranschaulicht und verifiziert:
 
 | Wert Port 1 | Wert Port 3 |
 |------|---|
@@ -122,7 +122,7 @@ Es wurden 10 Messungen $M_1\dots M_{10}$ durchgeführt:
 
 #### Tests für die Tendenzberechnung
 
-Die Tests werden anhand von nur zwei Messungen veranschaulicht um die Übersichtlichkeit zu gewährleisten: 
+Die Tendenz wird basierend der beiden zuletzt ermittelten Mittelwerte erstellt:
 
 |Mittelwert|$\Rightarrow$|Mittelwert||Tendenz|
 | --- | --- | --- | --- | --- |
