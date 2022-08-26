@@ -6,30 +6,30 @@ export_on_save:
 
 # Anmerkungen
 
-Beim Scheduler haben wir wie bei der Clock letztes mal mit Makros gearbeitet (`threading.a51`). Die Makros werden dann über einen in C# selbst geschriebenen pre-assembler (siehe [GitHub cross-platform releases (link)](https://github.com/benbekir/8051-assembly/releases)) aufgelöst (`threading-generated.a51`) und das programm kann anschließend wie gewohnt über `AS51 V4.exe` assembled werden.
+Beim Scheduler haben wir wie bei der Clock letztes mal mit Makros gearbeitet (`threading.a51`). Die Makros werden dann über einen in C# selbst geschriebenen pre-assembler (siehe [GitHub cross-platform releases (link)](https://github.com/benbekir/8051-assembly/releases)) aufgelöst (`threading-generated.a51`) und das Programm kann anschließend wie gewohnt über `AS51 V4.exe` assembled werden.
 
-Die im code verwendeten Makros werden dabei 1:1 durch die im Programm oben definierten Werte ersetzt.
+Die im Code verwendeten Makros werden dabei 1:1 durch die im Programm oben definierten Werte ersetzt.
 
 # Scheduler
 
 ## Konzept
 
-Auf Grund der Echtzeit-Anforderung des Reaktionstask, muss dieser mindestens einmal alle 10 ms einmal laufen. In unserer Implementierung wird nach der Initialisierung der Sortier-Task gestartet und der Timer Interrupt freigegeben. Diese Timer Interrupts werden anschließend jedoch nur alle 10 ms verarbeitet, sodass die Vorgabe für den Reaktionstask gerade so eingehalten wird. Ausgehend von einer Abschätzung (10 ms intervall @12MHz CPU frequenz $\Rightarrow$ 120.000 Takte pro Intervall, bei $\varnothing\sim 2$ Takten pro Instruction liefert ca. 60.000 Instructions pro interrupt) kamen wir zu dem Schluss, dass wir somit nacheinander und konfliktfrei während einer solchen Interruptverarbeitung alle drei anderen Tasks einmal "komplett durchlaufen lassen" können. Somit werden nacheinander der Reaktions, Clock (und alle 10 sekunden Temperatur)-task verarbeitet. Anschließend wird das Sortieren fortgesetzt.
+Auf Grund der Echtzeit-Anforderung des Reaktionstask, muss dieser mindestens einmal alle 10 ms laufen. In unserer Implementierung wird nach der Initialisierung der Sortier-Task gestartet und der Timer Interrupt freigegeben. Diese Timer Interrupts werden anschließend jedoch nur alle 10 ms verarbeitet, sodass die Vorgabe für den Reaktionstask gerade so eingehalten wird. Ausgehend von einer Abschätzung (10 ms intervall @12MHz CPU frequenz $\Rightarrow$ 120.000 Takte pro Intervall, bei $\varnothing\sim 2$ Takten pro Instruction liefert ca. 60.000 Instructions pro interrupt) kamen wir zu dem Schluss, dass wir somit nacheinander und konfliktfrei während einer solchen Interruptverarbeitung alle drei anderen Tasks einmal "komplett durchlaufen lassen" können. Somit werden nacheinander der Reaktions, Clock (und alle 10 sekunden Temperatur)-task verarbeitet. Anschließend wird das Sortieren fortgesetzt.
 
 Aufgrund dieser Erkenntnis haben wir ein Single-Stack-Single-Register bank Design gewählt:
 
 **Single Stack**
-Hierbei werden die untersten stack frames immer vom Sortierungs Task verwendet (oder der `end` instruction, bzw. stack empty) und dann beim Auftreten eines Interrupts darauf aufbauend die anderen Tasks gepushed. Da diese Tasks nacheinander bis zum `return` durchlaufen, entstehen an dieser Stelle keine Konflikte. Anschlißend wird das letzte Stack Frame mit dem "return from interrupt" gepoppt und der Sortier-Task läuft weiter.
+Hierbei werden die untersten Stack Frames immer vom Sortierungs Task verwendet (oder der `end` instruction, bzw. stack empty) und dann beim Auftreten eines Interrupts darauf aufbauend die anderen Tasks gepushed. Da diese Tasks nacheinander bis zum `return` durchlaufen, entstehen an dieser Stelle keine Konflikte. Anschließend wird das letzte Stack Frame mit dem "return from interrupt" gepoppt und der Sortier-Task läuft weiter.
 
 **Single Register bank**
-Weiterhin verwenden wir nur eine einzelne Register Bank, die wir beim Start der Interruptverarbeitung in den von uns definierten `SWAP` Bereich im internen RAM sichern, und vor dem "return from interrupt" wieder herstellen. Gesichert werden hierbei: `PSW, A, B, r0-7, DPTR (dpl, dph)`, sowie die beiden selbst-definierten 32 bit "Register" `UINT32_0` und `UINT32_1`, bei denen es sich um spezielle RAM Regionen für 32 bit bit-shifting- und Additions-Operationen handelt (benötigt für das Dividieren der 16 bit Summe durch die Konstante `10` bei der Berechnung des Temperaturdurchschnitts). Diese Division wird ersetzt durch eine Multiplikation (weiterhin ersetzt durch `shift` und `add`) mit `0xcccd` (16 bit, mit overflow in 32 bit), gefolgt von einem Bitshift um 19 bits nach rechts. Theorisch greifen wir nur an dieser Stelle auf die 32 bit Register zu, halten uns jedoch durch das Sichern in den `SWAP`-Space die Möglichkeit offen, dies auch an anderen Stellen zu tun.
+Weiterhin verwenden wir nur eine einzelne Register Bank, die wir beim Start der Interruptverarbeitung in den von uns definierten `SWAP` Bereich im internen RAM sichern, und vor dem "return from interrupt" wieder herstellen. Gesichert werden hierbei: `PSW, A, B, r0-7, DPTR (dpl, dph)`, sowie die beiden selbst-definierten 32 bit "Register" `UINT32_0` und `UINT32_1`, bei denen es sich um spezielle RAM Regionen für 32 bit bit-shifting- und Additions-Operationen handelt (benötigt für das Dividieren der 16 bit Summe durch die Konstante `10` bei der Berechnung des Temperaturdurchschnitts). Diese Division wird ersetzt durch eine Multiplikation (weiterhin ersetzt durch `shift` und `add`) mit `0xcccd` (16 bit, mit overflow in 32 bit), gefolgt von einem Bitshift um 19 bits nach rechts. Theoretisch greifen wir nur an dieser Stelle auf die 32 bit Register zu, halten uns jedoch durch das Sichern in den `SWAP`-Space die Möglichkeit offen, dies auch an anderen Stellen zu tun.
 
 ## Umsetzung (Überblick)
 
-Der Scheduler läuft alle 10 ms und ruft die Funktion `TasksNofityAll()` auf. Dabei wird zu erst der aktuelle `ExecutionContext` durch aufrufen der `EXC_STORE` Funktion in den `SWAP` Bereich geschrieben.
-anschließend wird der `Reaktions` task aufgerufen. Nachdem der `Reaktions` task beendet wurde wird weiterhin die `Clock` benachrichtigt, dass 10 ms vergangen sind. Abhängig von dem internen Clock-counter wird dann eine Sekunde inkrementiert, wobei dann weiterhin der `Temperatur` task benachrichtigt wird.
+Der Scheduler läuft alle 10 ms und ruft die Funktion `TasksNofityAll()` auf. Dabei wird zuerst der aktuelle `ExecutionContext` durch Aufrufen der `EXC_STORE` Funktion in den `SWAP` Bereich geschrieben.
+Anschließend wird der `Reaktions` task aufgerufen. Nachdem der `Reaktions` task beendet wurde, wird weiterhin die `Clock` benachrichtigt, dass 10 ms vergangen sind. Abhängig von dem internen Clock-counter wird dann eine Sekunde inkrementiert, wobei dann weiterhin der `Temperatur` task benachrichtigt wird.
 
-Nachdem alle Tasks benachrichtigt wurden wird der originale `ExecutionContext` wieder aus dem `SWAP` Bereich geladen (`EXC_RESTORE`) und der interrupt beeendet. Somit läuft der `Sort` task nach kurzer Unterbrechung des Schedulers weiter.
+Nachdem alle Tasks benachrichtigt wurden wird der originale `ExecutionContext` wieder aus dem `SWAP` Bereich geladen (`EXC_RESTORE`) und der Interrupt beeendet. Somit läuft der `Sort` task nach kurzer Unterbrechung des Schedulers weiter.
 
 ```text
 INIT->SORT                                                     --> SORT
