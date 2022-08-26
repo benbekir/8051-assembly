@@ -4,6 +4,12 @@ export_on_save:
   pandoc: true
 ---
 
+# Anmerkungen
+
+Beim Scheduler haben wir wie bei der Clock letztes mal mit Makros gearbeitet (`threading.a51`). Die Makros werden dann über einen in C# selbst geschriebenen pre-assembler (siehe [GitHub cross-platform releases (link)](https://github.com/benbekir/8051-assembly/releases)) aufgelöst (`threading-generated.a51`) und das programm kann anschließend wie gewohnt über `AS51 V4.exe` assembled werden.
+
+Die im code verwendeten Makros werden dabei 1:1 durch die im Programm oben definierten Werte ersetzt.
+
 # Scheduler
 
 Der Scheduler läuft alle 10 ms und ruft die Funktion `TasksNofityAll()` auf. Dabei wird zu erst der aktuelle `ExecutionContext` durch aufrufen der `EXC_STORE` Funktion in den `SWAP` Bereich geschrieben.
@@ -12,9 +18,9 @@ anschließend wird der `Reaktions` task aufgerufen. Nachdem der `Reaktions` task
 Nachdem alle Tasks benachrichtigt wurden wird der originale `ExecutionContext` wieder aus dem `SWAP` Bereich geladen (`EXC_RESTORE`) und der interrupt beeendet. Somit läuft der `Sort` task nach kurzer Unterbrechung des Schedulers weiter.
 
 ```text
-INIT -> SORT ...                                                                      --> SORT
-                 \                                                                   /
-        Interrupt --> EXC_STORE() -> Reaction() -> Clock() -> EXC_RESTORE() -> reti -
+INIT->SORT                                                     --> SORT
+           \                                                  /
+   Interrupt-->EXC_STORE->Reaction->Clock->EXC_RESTORE->reti -
 ```
 
 **Memory layout**
@@ -44,7 +50,7 @@ Der Wert in Port 3 wird in den zwei least significant bits folgendermaßen gespe
 |Wertebereiche (Port 1)|Resultat (Port 3 / XH, XL)|
 | --- | --- |
 |100<x<200|0, 0|
-|x$\geq$200|1, 0|
+|x $\geq$ 200|1, 0|
 |x<100|0, 1|
 |x=100 $\lor$ error|1, 1|
 
@@ -98,19 +104,21 @@ Die Tendenz kann folgende Werte betragen:
 
 #### Tests für die Mittelwertberechnung
 
-|Messung 1|Messung 2|Messung 3|Messung 4|Messung 5|Messung 6|Messung 7|Messung 8|Messung 9|Messung 10||Mittelwert|
+Es wurden 10 Messungen $M_1\dots M_{10}$ durchgeführt: 
+
+| $M_1$ | $M_2$ | $M_3$ | $M_4$ | $M_5$ | $M_6$ | $M_7$ | $M_8$ | $M_9$ | $M_{10}$ |Mittelwert|
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-|0|0|0|0|0|0|0|0|0|0||0|
-|50d|0|0|0|0|0|0|0|0|0||5d|
-|50d|50d|0|0|0|0|0|0|0|0||10d|
-|50d|50d|50d|0|0|0|0|0|0|0||15d|
-|50d|50d|50d|50d|0|0|0|0|0|0||20d|
-|50d|50d|50d|50d|50d|0|0|0|0|0||25d|
-|50d|50d|50d|50d|50d|50d|0|0|0|0||30d|
-|50d|50d|50d|50d|50d|50d|50d|0|0|0||35d|
-|50d|50d|50d|50d|50d|50d|50d|50d|0|0||40d|
-|50d|50d|50d|50d|50d|50d|50d|50d|50d|0||45d|
-|50d|50d|50d|50d|50d|50d|50d|50d|50d|50d||50d|
+|0|0|0|0|0|0|0|0|0|0|0|
+|50d|0|0|0|0|0|0|0|0|0|5d|
+|50d|50d|0|0|0|0|0|0|0|0|10d|
+|50d|50d|50d|0|0|0|0|0|0|0|15d|
+|50d|50d|50d|50d|0|0|0|0|0|0|20d|
+|50d|50d|50d|50d|50d|0|0|0|0|0|25d|
+|50d|50d|50d|50d|50d|50d|0|0|0|0|30d|
+|50d|50d|50d|50d|50d|50d|50d|0|0|0|35d|
+|50d|50d|50d|50d|50d|50d|50d|50d|0|0|40d|
+|50d|50d|50d|50d|50d|50d|50d|50d|50d|0|45d|
+|50d|50d|50d|50d|50d|50d|50d|50d|50d|50d|50d|
 
 #### Tests für die Tendenzberechnung
 
