@@ -6,6 +6,30 @@ export_on_save:
 
 # Scheduler
 
+Der Scheduler läuft alle 10 ms und ruft die Funktion `TasksNofityAll()` auf. Dabei wird zu erst der aktuelle `ExecutionContext` durch aufrufen der `EXC_STORE` Funktion in den `SWAP` Bereich geschrieben.
+anschließend wird der `Reaktions` task aufgerufen. Nachdem der `Reaktions` task beendet wurde wird weiterhin die `Clock` benachrichtigt, dass 10 ms vergangen sind. Abhängig von dem internen Clock-counter wird dann eine Sekunde inkrementiert, wobei dann weiterhin der `Temperatur` task benachrichtigt wird.
+
+Nachdem alle Tasks benachrichtigt wurden wird der originale `ExecutionContext` wieder aus dem `SWAP` Bereich geladen (`EXC_RESTORE`) und der interrupt beeendet. Somit läuft der `Sort` task nach kurzer Unterbrechung des Schedulers weiter.
+
+```text
+INIT -> SORT ...                                                                      --> SORT
+                 \                                                                   /
+        Interrupt --> EXC_STORE() -> Reaction() -> Clock() -> EXC_RESTORE() -> reti -
+```
+
+**Memory layout**
+
+| Region        | Start | End   | Size | Description                                 |
+| --------------|-------|-------|------|---------------------------------------------|
+| RESERVED      | 0x0   | 0x8   | 8    | register bank 0                             |
+| STACK         | 0x8   | 0x2f  | 24   | stack                                       |
+| RAM 1         | 0x30  | 0x3f  | 16   | RAM for Task 1: Scheduler                   |
+| RAM 2         | -     | -     | 0    | RAM for Task 2: Reaction (allocation free)  |
+| RAM 3         | 0x40  | 0x4f  | 16   | RAM for Task 3: Clock                       |
+| RAM 3B        | 0x50  | 0x5f  | 16   | RAM for Task 3B: Temperature                |
+| RAM 4         | 0x60  | 0x67  | 8    | RAM for Task 4: Sorting (not used)          |
+| SWAP          | 0x68  | 0x7f  | 24   | swap area for execution context             |
+
 ## Reaction-Task (R-Task)
 
 Der Reaction-Task liest alle 10 ms den Wert aus Port 1 aus und schreibt basierend auf der Größenordnung einen festgelegten Wert in Port 3.
