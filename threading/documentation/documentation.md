@@ -10,6 +10,21 @@ Beim Scheduler haben wir wie bei der Clock letztes mal mit Makros gearbeitet (`t
 
 Die im Code verwendeten Makros werden dabei 1:1 durch die im Programm oben definierten Werte ersetzt.
 
+# Monitoring
+
+|| Software | Hardware | Hybrid |
+|-|-|-|-| 
+Vorteile | TODO
+Nachteile |
+Performanz |
+Genauigkeit |
+
+## 11.2
+
+Bei $12$ MHz Taktfrequenz zählt Timer 0 mit einer frequenz von $\frac{12}{12}$ MHz $= 1$ MHz, also $1\cdot 10^6$ mal pro Sekunde. Jede Stunde werden also $60 \cdot 60 \cdot 1\cdot 10^6 = 36\cdot 10^8$ Timer-Ticks gezählt. Wir benötigen also $\lceil\log_2\left(36\cdot 10^8\right)\rceil = \lceil 31.7454 \rceil = 32$ Bit um eine Gesamtlaufzeit von einer Stunde zu erfassen.
+
+Für eine Zeit von 6 Monaten $= \frac{365}{2} = 182.5$ Tage $\implies 182.5 * 24 * 60 * 60 = 15768000$ Sekunden @1MHz $\implies \lceil\log_2\left(15768000000000\right)\rceil = 44$ Bit, wobei dies in der Praxis mit 48 Bit = 6 Byte umgesetzt werden würde. Mit $48$ Bit ließen sich $2^{48}$ Timer Ticks repräsentieren, was ca. 8.92 Jahren entspricht.
+
 # Scheduler
 
 ## Konzept

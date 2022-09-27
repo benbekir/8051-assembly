@@ -13,7 +13,19 @@
 #DEFINE DIRECT_R6		06h
 #DEFINE DIRECT_R7		07h
 
+; global constants
+; true xor false => true
+#DEFINE TRUE 			#ffh
+#DEFINE FALSE			#00h
+
 ; ============================================================================
+
+; Timer 0 in 8-bit autoreload mode.
+#DEFINE TIMER_MODE			#02h
+; The overflow frequency of the timer 0 is 4000 Hz, the period duration 0.25 ms.
+#DEFINE TIMER_RELOAD_VALUE	#06h
+#DEFINE TIMER_VALUE			tl0
+#DEFINE TIMER_RANGE			#250d
 
 ; Scheduler
 ; addresses
@@ -29,13 +41,51 @@
 #DEFINE UINT32_11			35h
 #DEFINE UINT32_12			36h
 #DEFINE UINT32_13			37h
-#DEFINE TICK_COUNTER 		38h
+
+#DEFINE TICK_COUNTER 			38h
+
+#DEFINE T0_RESUMED_MICRO_TICKS	39h
+#DEFINE T0_RESUMED_TICKS		3ah
+
+#DEFINE TX_START_TICKS			3bh
+#DEFINE TX_START_MICRO_TICKS	3ch
+
+; Task 0 (sorting) monitoring counter LE
+#DEFINE T0_CTR32_0			40h
+#DEFINE T0_CTR32_1			41h
+#DEFINE T0_CTR32_2			42h
+#DEFINE T0_CTR32_3			43h
+
+; Task 1 (reaction) monitoring counter LE
+#DEFINE T1_CTR32_0			44h
+#DEFINE T1_CTR32_1			45h
+#DEFINE T1_CTR32_2			46h
+#DEFINE T1_CTR32_3			47h
+
+; Task 2 (clock) monitoring counter LE
+#DEFINE T2_CTR32_0			48h
+#DEFINE T2_CTR32_1			49h
+#DEFINE T2_CTR32_2			4ah
+#DEFINE T2_CTR32_3			4bh
+
+; Task 2 (temperature) monitoring counter LE
+#DEFINE T3_CTR32_0			4ch
+#DEFINE T3_CTR32_1			4dh
+#DEFINE T3_CTR32_2			4eh
+#DEFINE T3_CTR32_3			4fh
 
 ; constants
 ; 40 at 4000Hz = 10 ms
 #DEFINE TICK_RESET_VALUE	#40d
+; 32 bit register pointers
 #DEFINE UINT32_0_PTR		#30h
 #DEFINE UINT32_1_PTR		#34h
+; monitoring counter pointers
+#DEFINE MONITORING_BASE_PTR #40h
+#DEFINE T0_CTR32_PTR		#40h
+#DEFINE T1_CTR32_PTR		#44h
+#DEFINE T2_CTR32_PTR		#48h
+#DEFINE T3_CTR32_PTR		#4ch
 
 ; ============================================================================
 
@@ -67,15 +117,28 @@
 
 ; ============================================================================
 
+; REACTION
+; register-based variables
+#DEFINE REACTION_INPUT			p1
+#DEFINE REACTION_TEST_VALUE		r0
+#DEFINE REACTION_OUTPUT			p3
+#DEFINE REACTION_RETURN_VALUE 	r1
+#DEFINE REACTION_CODE_LESS_100	#1h
+#DEFINE REACTION_CODE_100		#3h
+#DEFINE REACTION_CODE_100_200	#0h
+#DEFINE REACTION_CODE_200_PLUS	#2h
+
+; ============================================================================
+
 ; CLOCK
 ; memory addresses
-#DEFINE CLOCK_HOURS_PTR			#40h
-#DEFINE CLOCK_MINUTES_PTR		#41h
-#DEFINE CLOCK_SECONDS_PTR		#42h
-#DEFINE CLOCK_MAX_HOURS_PTR		#43h
-#DEFINE CLOCK_MAX_MINUTES_PTR	#44h
-#DEFINE CLOCK_MAX_SECONDS_PTR	#45h
-#DEFINE CLOCK_TICK_COUNTER		46h		
+#DEFINE CLOCK_HOURS_PTR			#50h
+#DEFINE CLOCK_MINUTES_PTR		#51h
+#DEFINE CLOCK_SECONDS_PTR		#52h
+#DEFINE CLOCK_MAX_HOURS_PTR		#53h
+#DEFINE CLOCK_MAX_MINUTES_PTR	#54h
+#DEFINE CLOCK_MAX_SECONDS_PTR	#55h
+#DEFINE CLOCK_TICK_COUNTER		56h		
 
 ; constants
 #DEFINE CLOCK_MAX_HOURS			#23d
@@ -88,13 +151,13 @@
 
 ; TEMPERATURE
 ; memory addresses
-#DEFINE TEMPERATURE_RING_BUFFER		#50h
-#DEFINE TEMPERATURE_TICKS			5Ah
-#DEFINE TEMPERATURE_AVERAGE			5Bh
-#DEFINE TEMPERATURE_DRIFT			5Ch
-#DEFINE TEMPERATURE_RING_BUFFER_PTR	5Dh
-#DEFINE TEMPERATURE_SUM_LOW			5Eh
-#DEFINE TEMPERATURE_SUM_HIGH		5Fh
+#DEFINE TEMPERATURE_RING_BUFFER		#58h
+#DEFINE TEMPERATURE_TICKS			62h
+#DEFINE TEMPERATURE_AVERAGE			63h
+#DEFINE TEMPERATURE_DRIFT			64h
+#DEFINE TEMPERATURE_RING_BUFFER_PTR	65h
+#DEFINE TEMPERATURE_SUM_LOW			66h
+#DEFINE TEMPERATURE_SUM_HIGH		67h
 
 ; constants
 #DEFINE TEMPERATURE_RING_BUFFER_SIZE	#10d
@@ -107,9 +170,6 @@
 ; ============================================================================
 
 ; SORT
-; constants
-#DEFINE SORT_TRUE 		#ffh
-#DEFINE SORT_FALSE		#00h
 
 ; variable registers
 #DEFINE SORT_SWAPPED	b
@@ -146,15 +206,15 @@
 ;  --------------+-------+-------+------+----------------------------------------------
 ;  STACK         | 0x8	 | 0x2f	 | 24   | stack
 ;  --------------+-------+-------+------+----------------------------------------------
-;  RAM 1	  	 | 0x30	 | 0x3f	 | 16   | RAM for Task 1: Scheduler
+;  RAM S	  	 | 0x30	 | 0x4f	 | 32   | RAM for Scheduler
 ;  --------------+-------+-------+------+----------------------------------------------
-;  RAM 2    	 | -	 | -	 | 0    | RAM for Task 2: Reaction (allocation free)
+;  RAM 1    	 | -	 | -	 | 0    | RAM for Task 1: Reaction (allocation free)
 ;  --------------+-------+-------+------+----------------------------------------------
-;  RAM 3	  	 | 0x40	 | 0x4f	 | 16   | RAM for Task 3: Clock
+;  RAM 2	  	 | 0x50	 | 0x57	 | 8    | RAM for Task 2: Clock
 ;  --------------+-------+-------+------+----------------------------------------------
-;  RAM 3B	  	 | 0x50	 | 0x5f	 | 16   | RAM for Task 3B: Temperature
+;  RAM 3	  	 | 0x58	 | 0x67	 | 16   | RAM for Task 3: Temperature
 ;  --------------+-------+-------+------+----------------------------------------------
-;  RAM 4  	 	 | 0x60	 | 0x67  | 8    | RAM for Task 4: Sorting
+;  RAM 0  	 	 | -	 | -     | 0    | RAM for Task 0: Sorting (allocation free)
 ;  --------------+-------+-------+------+----------------------------------------------
 ;  SWAP 		 | 0x68	 | 0x7f	 | 24   | swap area for execution context
 
@@ -180,56 +240,190 @@ Timer 0:    ; Timer 0 Interrupt
 Initialize:
 	; setup stack
 	mov	SP, STACK_START
-
-	; reset clock tick counter
-	lcall ResetTicks
-
-	orl TMOD, # 02h    ; Timer 0 im 8-Bit Autoreload-Modus. 
-	; Die �berlauffrequenz des Timer 0 betr�gt 4000 Hz, die Periodendauer 0,25 ms.
-	mov TH0, # 06h    ; Reloadwert
+	; Timer 0 in 8-bit autoreload mode.
+	orl TMOD, TIMER_MODE
+	; The overflow frequency of the timer 0 is 4000 Hz, the period duration 0.25 ms.
+	mov TH0, TIMER_RELOAD_VALUE
+	; Timer 0 ticks at 1 MHz
 
 	; Interrupts
 	setb ET0    ; Timer 0 Interrupt freigeben
 	setb EA    ; globale Interruptfreigabe
-	setb TR0    ; Timer 0 l�uft.
+	
+	; initialize monitoring
+	lcall MON_Init
+
+	;reset clock tick counter
+	lcall ResetTicks
 
 	; initialize clock
 	lcall Clock_Init
 	lcall Temperature_Init
 
+	; setup monitoring variables for task 0 (sorting)
+	mov T0_RESUMED_TICKS, TICK_RESET_VALUE
+	; actually + time needed for setb and lcall
+	mov T0_RESUMED_MICRO_TICKS, TIMER_RELOAD_VALUE
+
+	setb TR0    ; Timer 0 l�uft.
 	; run sorting task by default
 	lcall Sort_Notify
 
 	end ; <- return adderss on first interrupt
 ; * * * Hauptprogramm Ende * * *
 
-; if (--tick_counter == 0) 
+; if (--interruptCounter == 0) 
 ; {
 ; 	  ResetTicks();
-;	  TasksNofityAll();
+;	  TasksNotifyAll();
 ; }
 OnTick:
+	; T0 overflowed. T0 will be 06h (reset value) here.
 	; can not use registers here, execution context is not yet stored
 	djnz TICK_COUNTER, __OnTick_End
+	; store execution context
+	lcall EXC_STORE
+	; stop measurement of T0 task
+	; t0Elapsed += t0ResumedTicks * 250 - (t0ResumedMicroTicks - timerReloadValue)
+	mov r2, T0_CTR32_PTR
+	push DIRECT_R2			; push uint32_t* pCounterTask0 to stack
+	; t0ResumedTicks * 250 - (t0ResumedMicroTicks - timerReloadValue)
+	clr c
+	mov a, T0_RESUMED_MICRO_TICKS	; t0ResumedMicroTicks to a
+	subb a, TIMER_RELOAD_VALUE		; a = a - timerReloadValue
+	mov r1, a						; r1 = a
+	clr c
+	mov a, T0_RESUMED_TICKS			; a = t0ResumedTicks
+	mov b, TIMER_RANGE				; b = timerRange (250)
+	mul ab
+	clr c
+	subb a, r1
+	mov r2, a
+	push DIRECT_R2					; push low elapsed to stack
+	mov a, b
+	subb a, #0
+	mov r2, a
+	push DIRECT_R2					; push high elapsed to stack
+	lcall Add32_Dyn 				; 32 bit + 16 bit addition
 	; 10 ms elapsed -> let all tasks run
 	lcall ResetTicks
-	lcall TasksNofityAll
+	lcall TasksNotifyAll
+	; restore execution context
+	lcall EXC_RESTORE
+	; resume measurement of T0 task
+	mov T0_RESUMED_TICKS, TICK_COUNTER		; snap copy of current tick counter
+	mov T0_RESUMED_MICRO_TICKS, TIMER_VALUE	; snap copy of current timer value
 __OnTick_End:
 	reti
 
-TasksNofityAll:
-	; store execution context
-	lcall EXC_STORE
+TasksNotifyAll:
 	; notify all tasks
+	lcall MON_StartMeasurement	; start measurement of reaction task
 	lcall Reaction_Notify
+	lcall MON_StopMeasurement	; stop measurement
+	; load target address of 32bit reaction time counter
+	mov r0, T1_CTR32_PTR
+	push DIRECT_R0
+	lcall MON_StoreMeasurement	; store measuement
+
+	lcall MON_StartMeasurement	; start measurement of clock task
 	lcall Clock_Notify
-	; restore execution context
-	lcall EXC_RESTORE
+	; return value of Clock (secondElapsed = true|false) to r4 (unused by monitoring)
+	pop DIRECT_R4
+	lcall MON_StopMeasurement	; stop measurement
+	; load target address of 32bit clock time counter
+	mov r0, T2_CTR32_PTR
+	push DIRECT_R0
+	lcall MON_StoreMeasurement	; store measuement
+
+	lcall MON_StartMeasurement	; start measurement of temperature task
+	mov a, r4					; load return value of clock & check if 10 seconds elapsed
+	jz __TasksNotifyAll_SkipTemperature
+	lcall Temperature_Notify
+__TasksNotifyAll_SkipTemperature:
+	lcall MON_StopMeasurement	; stop measurement
+	; load target address of 32bit temperature time counter
+	mov r0, T3_CTR32_PTR
+	push DIRECT_R0
+	lcall MON_StoreMeasurement	; store measuement
 	ret
 
 ; reset ticks
 ResetTicks:
 	mov TICK_COUNTER, TICK_RESET_VALUE
+	ret
+
+; sets all monitoring counters to 0
+MON_Init:
+	; MemSet(monitoringBasePtr, 16, 0);
+	mov r0, MONITORING_BASE_PTR	; load base pointer of counter region
+	push DIRECT_R0				; push to stack
+	mov r0, #16					; load size of counter region
+	push DIRECT_R0				; push to stack
+	mov r0, #0					; load target value = 0
+	push DIRECT_R0				; push to stack
+	lcall MemSet				; call memset
+	ret
+	
+; snap a copy of the current interruptCounter and currentTimerValue. 
+; locking would be nice here, to prevent interrupts from changing the interruptCounter
+MON_StopMeasurement:
+	mov r0, TIMER_VALUE
+	mov r1, TICK_COUNTER
+	; store return address
+	pop DIRECT_R7
+	pop DIRECT_R6
+	; push result
+	push DIRECT_R0
+	push DIRECT_R1
+	; restore return address
+	push DIRECT_R6
+	push DIRECT_R7
+	ret
+
+MON_StartMeasurement:
+	mov TX_START_TICKS, TICK_COUNTER
+	mov TX_START_MICRO_TICKS, TIMER_VALUE
+	ret
+
+; void MON_StoreMeasurement(uint8_t tickCounter, uint8_t timerValue, uint32_t* pCounter, );
+; 	*pCounter += (startTicks - interruptCounter) * 250 + currentTimerValue - startMicroTicks;
+MON_StoreMeasurement:
+	; store our return address
+	pop DIRECT_R7
+	pop DIRECT_R6
+	; pop parameters but leave pCounter on the stack
+	pop DIRECT_R2				; pCounter to r2
+	pop DIRECT_R1				; current interruptCounter to r1
+	pop DIRECT_R0				; current currentTimerValue to r0
+	; restore return address
+	push DIRECT_R6
+	push DIRECT_R7
+	; pCounter is first parameter for Add32_Dyn
+	push DIRECT_R2				; push pCounter back to stack
+	; (startTicks - interruptCounter)
+	mov a, TX_START_TICKS
+	clr c
+	subb a, r1					; assume no underflow here :)
+	; (startTicks - interruptCounter) * 250 
+	mov b, TIMER_RANGE
+	mul ab
+	; (startTicks - interruptCounter) * 250 + currentTimerValue
+	add a, r0
+	xch a, b
+	addc a, #0
+	xch a, b
+	; (startTicks - interruptCounter) * 250 + currentTimerValue - startMicroTicks;
+	clr c
+	subb a, TX_START_MICRO_TICKS
+	mov r2, a
+	push DIRECT_R2
+	mov a, b
+	subb a, #0
+	mov r2, a
+	push DIRECT_R2
+	;*pCounter += (startTicks - interruptCounter) * 250 + currentTimerValue - startMicroTicks;
+	lcall Add32_Dyn				; 32-bit + 16-bit addition
 	ret
 
 ; stores the execution context in the swap area
@@ -401,6 +595,68 @@ Add32:
 	mov UINT32_03, a		; store result in UINT32_0 byte 3
 	ret
 
+; Dynamically adds summand to *pvalue and stores the result in *pvalue;
+; void Add32_Dyn(uint32_t* pvalue, uint8_t summandLow, uint8_t summandHigh);
+;     *value += summand;
+Add32_Dyn:
+	; store our return address
+	pop DIRECT_R7			; high byte to r7
+	pop DIRECT_R6			; low byte to r6
+	; now get parameters
+	pop DIRECT_R2			; summandHigh to r2
+	pop DIRECT_R1			; summandLow to r1
+	pop DIRECT_R0			; pvalue to r0
+	; restore return address
+	push DIRECT_R6
+	push DIRECT_R7
+	; byte 0
+	mov a, r1
+	add a, @r0
+	mov @r0, a
+	inc r0
+	; byte 1
+	mov a, r2
+	addc a, @r0
+	mov @r0, a
+	inc r0
+	; byte 2
+	mov a, #0
+	addc a, @r0
+	mov @r0, a
+	inc r0
+	; byte 3
+	mov a, #0
+	addc a, @r0
+	mov @r0, a
+	ret
+
+; void MemSet(void* ptr, uint8_t size, uint8_t value)
+MemSet:
+	; store our return address
+	pop DIRECT_R7			; high byte to r7
+	pop DIRECT_R6			; low byte to r6
+	; now get parameters
+	pop DIRECT_R2			; value to r2
+	pop DIRECT_R1			; size to r1
+	pop DIRECT_R0			; ptr to r0
+	; calculate stop address for memset (ptr + size)
+	mov a, r1
+	add a, r0
+	mov r1, a				; boundary address to r1
+__MemSet_Loop:
+	mov a, r1
+	xrl a, r0
+	jz __MemSet_LoopEnd
+	mov a, r2
+	mov @r0, a
+	inc r0
+	ljmp __MemSet_Loop
+__MemSet_LoopEnd:
+	; restore return address
+	push DIRECT_R6
+	push DIRECT_R7
+	ret
+
 ; ============================================================================
 ; 									REACTION
 ; ============================================================================
@@ -411,27 +667,33 @@ Add32:
 ; 0,0: 100 < Wert < 200
 ; 1,0 : Wert >= 200
 Reaction_Notify:
-	mov r0, p1					; take snapshot of port 1
-	mov r1, #1h					; store return value in r1, assume value < 100
+	; take snapshot of port 1
+	mov REACTION_TEST_VALUE, REACTION_INPUT
+	; store return value in r1, assume value < 100
+	mov REACTION_RETURN_VALUE, REACTION_CODE_LESS_100
 	; compare against < 100
-	mov a, #99d
 	clr c
-	subb a, r0					; subtract value from 99
+	mov a, #99d
+	subb a, REACTION_TEST_VALUE	; subtract value from 99
 	jnc __Reaction_NotifyEnd	; if no carry, value is <= 99
-	mov r1, #3h					; value is > 99, assume value == 100
+	; value is > 99, assume value == 100
+	mov REACTION_RETURN_VALUE, REACTION_CODE_100
 	; compare against 100
 	mov a, #100d
-	xrl a, r0					; xor value with 100
+	xrl a, REACTION_TEST_VALUE	; xor value with 100
 	jz __Reaction_NotifyEnd		; if zero, value is 100
-	mov r1, #0h					; value is > 100, assume value < 200
+	; value is > 100, assume value < 200
+	mov REACTION_RETURN_VALUE, REACTION_CODE_100_200
 	; compare against < 200
-	mov a, #199d
 	clr c
-	subb a, r0					; subtract value from 199
+	mov a, #199d
+	subb a, REACTION_TEST_VALUE	; subtract value from 199
 	jnc __Reaction_NotifyEnd	; if no carry, value is <= 199
-	mov r1, #2h					; value is >= 200
+	; value is >= 200
+	mov REACTION_RETURN_VALUE, REACTION_CODE_200_PLUS					
 __Reaction_NotifyEnd:
-	mov p3, r1					; store return value in port 3
+	; store return value in port 3
+	mov REACTION_OUTPUT, REACTION_RETURN_VALUE	
 	ret
 
 ; ============================================================================
@@ -455,19 +717,32 @@ Clock_Init:
 	lcall Clock_ResetTicks
 	ret
 
+
+; returns true if a second has elapsed.
+; bool Clock_Notify()
 ; if (--clock_tick_counter == 0) 
 ; {
 ; 	  Clock_ResetTicks();
 ;	  Clock_OnEachSecond();
-;  	  Temperature_Notify();
+; 	  return true; 
 ; }
+; return false; 
 Clock_Notify:
+	mov r0, FALSE				; assume false by default
 	djnz CLOCK_TICK_COUNTER, __Clock_NotifyEnd
 	; a second has elapsed
 	lcall Clock_ResetTicks
 	lcall Clock_OnEachSecond
-	lcall Temperature_Notify
+	mov r0, TRUE				; a second has elapsed -> return true
 __Clock_NotifyEnd:
+	; store return address
+	pop DIRECT_R7
+	pop DIRECT_R6
+	; push return value
+	push DIRECT_R0
+	; restore return address
+	push DIRECT_R6
+	push DIRECT_R7
 	ret
 
 Clock_ResetTicks:
@@ -665,29 +940,14 @@ Temperature_Init:
 	; set drift to "steady" for now
 	mov TEMPERATURE_DRIFT, TEMPERATURE_DRIFT_STEADY
 	; clear temperature buffer (all 0)
-
-	; buffer--; // loop breaks before setting the first element :P
-	; int i = buffer.Length + 1; // loop pre-decrements (add offset from previous line)
-	; do 
-	; {
-	;	  if (--i == 0) break; 
-	; 	  buffer[i] = 0;
-	; } 
-	; while (i > 0);
+	; Memset(baseAddress, size, 0);
 	mov r2, TEMPERATURE_RING_BUFFER 		; load ring buffer base address to r2
-	dec r2									; dumb offset to get the first element
-	mov r1, TEMPERATURE_RING_BUFFER_SIZE	; load buffer size to r1 (loop counter)
-	inc r1									; add 1 to r1 (loop counter)
-__Temperature_InitLoopHeader:
-	djnz r1, __Temperature_InitLoop
-	jmp __Temperature_InitLoopBreak
-__Temperature_InitLoop:
-	mov a, r2								; load ring buffer base address to a
-	add a, r1								; add offfset to base address to a
-	mov r0, a								; target address to r0
-	mov @r0, #0								; set element to 0
-	ljmp __Temperature_InitLoopHeader		; loop
-__Temperature_InitLoopBreak:
+	push DIRECT_R2							; push to stack
+	mov r2, TEMPERATURE_RING_BUFFER_SIZE	; load buffer size
+	push DIRECT_R2							; push to stack
+	mov r2, #0								; load target value
+	push DIRECT_R2							; push to stack
+	lcall MemSet							; call memset
 	ret
 
 ; notifies the temperature sensor that a second has elapsed
@@ -996,12 +1256,12 @@ Temperature_LoadSumToUINT32_1:
 
 ; called only once, when the program starts
 Sort_Notify:
-	mov SORT_SWAPPED, SORT_TRUE		; uint8_t swapped = true;
+	mov SORT_SWAPPED, TRUE		; uint8_t swapped = true;
 __Sort_Notify_OuterLoop:
 	; while (swapped != false)
 	mov a, SORT_SWAPPED
 	jz __Sort_Notify_OuterBreak
-	mov SORT_SWAPPED, SORT_FALSE	; swapped = false;
+	mov SORT_SWAPPED, FALSE	; swapped = false;
 	; uint16_t i = 1;
 	mov SORT_I_LOW, #1				;  r5 (i low)
 	mov SORT_I_HIGH, #0				;  r6 (i high)
@@ -1042,7 +1302,7 @@ __Sort_Notify_InnerLoop:
 	mov a, SORT_CURRENT		; load current value
 	movx @dptr, a			; write current value to previous location
 	; remember we swapped something (swapped = true);
-	mov SORT_SWAPPED, SORT_TRUE	
+	mov SORT_SWAPPED, TRUE	
 	ljmp __Sort_Notify_Continue
 __Sort_Notify_NoSwap:
 	; if we didn't swap anything, we need to update the previous value
