@@ -248,7 +248,7 @@ Initialize:
 
 	; Interrupts
 	setb ET0    ; Timer 0 Interrupt freigeben
-	setb EA    ; globale Interruptfreigabe
+	setb EA    	; globale Interruptfreigabe
 	
 	; initialize monitoring
 	lcall MON_Init
@@ -283,6 +283,14 @@ OnTick:
 	djnz TICK_COUNTER, __OnTick_End
 	; store execution context
 	lcall EXC_STORE
+	; immediately re-enable timer 0 interrupt (allow interrupting itself for accurate monitoring)
+	; as we NEED to count timer overflows to "allow time to pass" while running all the tasks.
+	; for some reason timer 0 seems to run at 12MHz too which doesn't make sense, because
+	; 250 ticks timer range (reload value = 0x6) @12MHz is 48000Hz, not 4000Hz as the AS51 timer
+	; config tool wants us make to believe.
+	; So either we're running too fast or the simulator's timer is broken as it *should* tick @1MHz.
+	; Still this code works: (only clock seconds may actually be 1/12th of a second) :P
+	lcall RestoreInterruptLogic
 	; stop measurement of T0 task
 	; t0Elapsed += t0ResumedTicks * 250 - (t0ResumedMicroTicks - timerReloadValue)
 	mov r2, T0_CTR32_PTR
@@ -313,7 +321,11 @@ OnTick:
 	; resume measurement of T0 task
 	mov T0_RESUMED_TICKS, TICK_COUNTER		; snap copy of current tick counter
 	mov T0_RESUMED_MICRO_TICKS, TIMER_VALUE	; snap copy of current timer value
+	ret
 __OnTick_End:
+	reti
+
+RestoreInterruptLogic:
 	reti
 
 TasksNotifyAll:
@@ -482,6 +494,62 @@ EXC_RESTORE:
 	mov psw, SWAP_PSW
 	ret
 
+; adds the UINT32_0 to UINT32_1 and stores the result in UINT32_0
+; void Add32();
+Add32:
+	; byte 0
+	mov a, UINT32_00		; load byte 0 (low byte) of UINT32_0 to a
+	add a, UINT32_10		; add byte 0 (low byte) of UINT32_1 to byte 0 of UINT32_0
+	mov UINT32_00, a		; store result in UINT32_0 low byte
+	; byte 1
+	mov a, UINT32_01		; load byte 1 of UINT32_0 to a
+	addc a, UINT32_11		; add byte 1 of UINT32_1 to byte 1 of UINT32_0
+	mov UINT32_01, a		; store result in UINT32_0 byte 1
+	; byte 2
+	mov a, UINT32_02		; load byte 2 of UINT32_0 to a
+	addc a, UINT32_12		; add byte 2 of UINT32_1 to byte 2 of UINT32_0
+	mov UINT32_02, a		; store result in UINT32_0 byte 2
+	; byte 3
+	mov a, UINT32_03		; load byte 3 of UINT32_0 to a
+	addc a, UINT32_13		; add byte 3 of UINT32_1 to byte 3 of UINT32_0
+	mov UINT32_03, a		; store result in UINT32_0 byte 3
+	ret
+
+; Dynamically adds summand to *pvalue and stores the result in *pvalue;
+; void Add32_Dyn(uint32_t* pvalue, uint8_t summandLow, uint8_t summandHigh);
+;     *value += summand;
+Add32_Dyn:
+	; store our return address
+	pop DIRECT_R7			; high byte to r7
+	pop DIRECT_R6			; low byte to r6
+	; now get parameters
+	pop DIRECT_R2			; summandHigh to r2
+	pop DIRECT_R1			; summandLow to r1
+	pop DIRECT_R0			; pvalue to r0
+	; restore return address
+	push DIRECT_R6
+	push DIRECT_R7
+	; byte 0
+	mov a, r1
+	add a, @r0
+	mov @r0, a
+	inc r0
+	; byte 1
+	mov a, r2
+	addc a, @r0
+	mov @r0, a
+	inc r0
+	; byte 2
+	mov a, #0
+	addc a, @r0
+	mov @r0, a
+	inc r0
+	; byte 3
+	mov a, #0
+	addc a, @r0
+	mov @r0, a
+	ret
+
 ; modifies a, b, r0-r3
 ; void ShiftLeft32(uint32_t* value, byte count);
 ShiftLeft32:
@@ -572,62 +640,6 @@ __ShiftRight32_End:
 	; now restore the return address
 	push DIRECT_R2			; low byte to stack
 	push DIRECT_R3			; high byte to stack
-	ret
-
-; adds the UINT32_0 to UINT32_1 and stores the result in UINT32_0
-; void Add32();
-Add32:
-	; byte 0
-	mov a, UINT32_00		; load byte 0 (low byte) of UINT32_0 to a
-	add a, UINT32_10		; add byte 0 (low byte) of UINT32_1 to byte 0 of UINT32_0
-	mov UINT32_00, a		; store result in UINT32_0 low byte
-	; byte 1
-	mov a, UINT32_01		; load byte 1 of UINT32_0 to a
-	addc a, UINT32_11		; add byte 1 of UINT32_1 to byte 1 of UINT32_0
-	mov UINT32_01, a		; store result in UINT32_0 byte 1
-	; byte 2
-	mov a, UINT32_02		; load byte 2 of UINT32_0 to a
-	addc a, UINT32_12		; add byte 2 of UINT32_1 to byte 2 of UINT32_0
-	mov UINT32_02, a		; store result in UINT32_0 byte 2
-	; byte 3
-	mov a, UINT32_03		; load byte 3 of UINT32_0 to a
-	addc a, UINT32_13		; add byte 3 of UINT32_1 to byte 3 of UINT32_0
-	mov UINT32_03, a		; store result in UINT32_0 byte 3
-	ret
-
-; Dynamically adds summand to *pvalue and stores the result in *pvalue;
-; void Add32_Dyn(uint32_t* pvalue, uint8_t summandLow, uint8_t summandHigh);
-;     *value += summand;
-Add32_Dyn:
-	; store our return address
-	pop DIRECT_R7			; high byte to r7
-	pop DIRECT_R6			; low byte to r6
-	; now get parameters
-	pop DIRECT_R2			; summandHigh to r2
-	pop DIRECT_R1			; summandLow to r1
-	pop DIRECT_R0			; pvalue to r0
-	; restore return address
-	push DIRECT_R6
-	push DIRECT_R7
-	; byte 0
-	mov a, r1
-	add a, @r0
-	mov @r0, a
-	inc r0
-	; byte 1
-	mov a, r2
-	addc a, @r0
-	mov @r0, a
-	inc r0
-	; byte 2
-	mov a, #0
-	addc a, @r0
-	mov @r0, a
-	inc r0
-	; byte 3
-	mov a, #0
-	addc a, @r0
-	mov @r0, a
 	ret
 
 ; void MemSet(void* ptr, uint8_t size, uint8_t value)
