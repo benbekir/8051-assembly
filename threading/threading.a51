@@ -245,6 +245,8 @@ Initialize:
 	; The overflow frequency of the timer 0 is 4000 Hz, the period duration 0.25 ms.
 	mov TH0, TIMER_RELOAD_VALUE
 	; Timer 0 ticks at 1 MHz
+	; reset timer to reload value
+	mov TIMER_VALUE, TIMER_RELOAD_VALUE
 
 	; Interrupts
 	setb ET0    ; Timer 0 Interrupt freigeben
@@ -265,12 +267,10 @@ Initialize:
 	; actually + time needed for setb and lcall
 	mov T0_RESUMED_MICRO_TICKS, TIMER_RELOAD_VALUE
 
-	setb TR0    ; Timer 0 l�uft.
+	setb TR0    ; start Timer 0
 	; run sorting task by default
 	lcall Sort_Notify
-
-	end ; <- return adderss on first interrupt
-; * * * Hauptprogramm Ende * * *
+	end
 
 ; if (--interruptCounter == 0) 
 ; {
@@ -319,12 +319,15 @@ OnTick:
 	; restore execution context
 	lcall EXC_RESTORE
 	; resume measurement of T0 task
+	; locking would be great here :P
 	mov T0_RESUMED_TICKS, TICK_COUNTER		; snap copy of current tick counter
 	mov T0_RESUMED_MICRO_TICKS, TIMER_VALUE	; snap copy of current timer value
 	ret
 __OnTick_End:
 	reti
 
+; re-enables interrupts by abusing the reti instruction :)
+; allows Timer 0 to interrupt the interrupt handling logic triggered by a Timer 0 interrupt 
 RestoreInterruptLogic:
 	reti
 
@@ -515,7 +518,7 @@ Add32:
 	mov UINT32_03, a		; store result in UINT32_0 byte 3
 	ret
 
-; Dynamically adds summand to *pvalue and stores the result in *pvalue;
+; Adds the summand to dynamically provided *pvalue and stores the result in *pvalue;
 ; void Add32_Dyn(uint32_t* pvalue, uint8_t summandLow, uint8_t summandHigh);
 ;     *value += summand;
 Add32_Dyn:
@@ -589,54 +592,6 @@ __ShiftLeft32_Loop:
 	dec r1					
 	ljmp __ShiftLeft32_Loop
 __ShiftLeft32_End:
-	; now restore the return address
-	push DIRECT_R2			; low byte to stack
-	push DIRECT_R3			; high byte to stack
-	ret
-
-; modifies a, b, r0-r3
-; void ShiftRight32(uint32_t* value, byte count);
-ShiftRight32:
-	; store our return address
-	pop DIRECT_R3			; high byte to r3
-	pop DIRECT_R2			; low byte to r2
-	; now get parameters
-	pop DIRECT_R1			; count to r1
-	pop DIRECT_R0			; uint32_t* to r0
-	; this time we need to start shifting at the highest byte
-	mov a, r0 				; uint32_t* to a
-	add a, #3				; add 3 to a to get pointer at highest byte
-	mov r0, a				; store pointer back to r0
-	mov b, a				; create backup of high byte pointer in b
-	; right left
-__ShiftRight32_Loop:
-	mov a, r1				; count to a
-	jz __ShiftRight32_End	; if count == 0, we are done
-	clr c					; clear carry
-	; byte 3
-	mov a, @r0				; get byte 3 (highest byte) of uint32_t value to a
-	rrc a					; rotate right through carry
-	mov @r0, a				; store result in uint32_t value
-	dec r0					; decrement pointer to next byte
-	; byte 2
-	mov a, @r0				; get byte 2 of uint32_t value to a
-	rrc a					; rotate right through carry
-	mov @r0, a				; store result in uint32_t value
-	dec r0					; decrement pointer to next byte
-	; byte 1
-	mov a, @r0				; get byte 1 of uint32_t value to a
-	rrc a					; rotate right through carry
-	mov @r0, a				; store result in uint32_t value
-	dec r0					; decrement pointer to next byte
-	; byte 0
-	mov a, @r0				; get byte 0 of uint32_t value to a
-	rrc a					; rotate right through carry
-	mov @r0, a				; store result in uint32_t value
-	mov r0, b				; restore uint32_t* from b
-	; decrement count and loop
-	dec r1
-	ljmp __ShiftRight32_Loop
-__ShiftRight32_End:
 	; now restore the return address
 	push DIRECT_R2			; low byte to stack
 	push DIRECT_R3			; high byte to stack
@@ -728,7 +683,6 @@ Clock_Init:
 	mov @r0, CLOCK_MAX_SECONDS
 	lcall Clock_ResetTicks
 	ret
-
 
 ; returns true if a second has elapsed.
 ; bool Clock_Notify()
@@ -1063,7 +1017,7 @@ Temperature_16BitDivideBy10:
 	; we start by multiplying the sum by 0xcccd.
 	; the 0xcccd magic number was determined by C# compiler optimization.
 	; see: https://sharplab.io/#v2:EYLgxg9gTgpgtADwGwBYA0AXEBDAzgWwB8ABAJgEYBYAKGIGYACMhgYQZoG8aGenGBXAJYA7DAwAiggG4AhAJ7kADAAohohlOwAbfjACU7arwZcjx3sQDsG7boYB6Bkv4BubrwC+ND0A
-	; finally the result is shifted right by 19 bits (thogh we'll do some pointer magic to reduce operations).
+	; finally the result is shifted right by 19 bits (though we'll do some pointer magic to reduce operations).
 	; also we can't multiply by 0xcccd on hardware, so we have to do that manually too oO
 	; all of this is the same as dividing the 16 bit sum by 10.
 	
