@@ -4,134 +4,197 @@
 
 ; register macros for direct address mode
 ; register bank 0
-#DEFINE DIRECT_R0		00h
-#DEFINE DIRECT_R1		01h
-#DEFINE DIRECT_R2		02h
-#DEFINE DIRECT_R3		03h
-#DEFINE DIRECT_R4		04h
-#DEFINE DIRECT_R5		05h
-#DEFINE DIRECT_R6		06h
-#DEFINE DIRECT_R7		07h
+#define DIRECT_R0		00h
+#define DIRECT_R1		01h
+#define DIRECT_R2		02h
+#define DIRECT_R3		03h
+#define DIRECT_R4		04h
+#define DIRECT_R5		05h
+#define DIRECT_R6		06h
+#define DIRECT_R7		07h
+
+; global constants
+; true xor false => true
+#define TRUE 			#ffh
+#define FALSE			#00h	
 
 ; ============================================================================
+
+; Timer 0 in 8-bit autoreload mode.
+#define TIMER_MODE			#02h
+; The overflow frequency of the timer 0 is 4000 Hz, the period duration 0.25 ms.
+#define TIMER_RELOAD_VALUE	#06h
+#define TIMER_VALUE			tl0
 
 ; Scheduler
 ; addresses
 ; must be STACK_START = 0x8-1 = 7, because of the stack pointer
-#DEFINE STACK_START			#07h
+#define STACK_START			#07h
 ; universal buffer for 32 bit calculations
-#DEFINE UINT32_00			30h
-#DEFINE UINT32_01			31h
-#DEFINE UINT32_02			32h
-#DEFINE UINT32_03			33h
+#define UINT32_00			30h
+#define UINT32_01			31h
+#define UINT32_02			32h
+#define UINT32_03			33h
 ; second universal buffer for 32 bit calculations
-#DEFINE UINT32_10			34h
-#DEFINE UINT32_11			35h
-#DEFINE UINT32_12			36h
-#DEFINE UINT32_13			37h
-#DEFINE TICK_COUNTER 		38h
+#define UINT32_10			34h
+#define UINT32_11			35h
+#define UINT32_12			36h
+#define UINT32_13			37h
+
+; counts timer interrupts to keep track of when 10ms have elapsed.
+#define INTERRUPT_COUNT 	38h
+
+#define T0_RESUMED_TIMER_VALUE		39h
+#define T0_RESUMED_INTERRUPT_COUNT	3ah
+
+#define TX_START_TIMER_VALUE		3bh
+#define TX_START_INTERRUPT_COUNT	3ch
+
+; Task 0 (sorting) monitoring counter LE
+#define T0_CTR32_0			40h
+#define T0_CTR32_1			41h
+#define T0_CTR32_2			42h
+#define T0_CTR32_3			43h
+
+; Task 1 (reaction) monitoring counter LE
+#define T1_CTR32_0			44h
+#define T1_CTR32_1			45h
+#define T1_CTR32_2			46h
+#define T1_CTR32_3			47h
+
+; Task 2 (clock) monitoring counter LE
+#define T2_CTR32_0			48h
+#define T2_CTR32_1			49h
+#define T2_CTR32_2			4ah
+#define T2_CTR32_3			4bh
+
+; Task 2 (temperature) monitoring counter LE
+#define T3_CTR32_0			4ch
+#define T3_CTR32_1			4dh
+#define T3_CTR32_2			4eh
+#define T3_CTR32_3			4fh
 
 ; constants
 ; 40 at 4000Hz = 10 ms
-#DEFINE TICK_RESET_VALUE	#40d
-#DEFINE UINT32_0_PTR		#30h
-#DEFINE UINT32_1_PTR		#34h
+#define INTERRUPT_COUNT_RESET_VALUE	#40d
+; 32 bit register pointers
+#define UINT32_0_PTR		#30h
+#define UINT32_1_PTR		#34h
+; monitoring counter pointers
+#define MONITORING_BASE_PTR #40h
+#define T0_CTR32_PTR		#40h
+#define T1_CTR32_PTR		#44h
+#define T2_CTR32_PTR		#48h
+#define T3_CTR32_PTR		#4ch
+#define MONITORING_CORRECTION		#6d
+#define ACTIVE_CYCLES_PER_INTERRUPT	#242d
+#define T0_CORRECTION		#4d
 
 ; ============================================================================
 
 ; SWAP area
-#DEFINE SWAP_A			68h
-#DEFINE SWAP_B			69h
-#DEFINE SWAP_R0			6Ah
-#DEFINE SWAP_R1			6Bh
-#DEFINE SWAP_R2			6Ch
-#DEFINE SWAP_R3			6Dh
-#DEFINE SWAP_R4			6Eh
-#DEFINE SWAP_R5			6Fh
-#DEFINE SWAP_R6			70h
-#DEFINE SWAP_R7			71h
-#DEFINE SWAP_DPL		72h
-#DEFINE SWAP_DPH		73h
+#define SWAP_A			68h
+#define SWAP_B			69h
+#define SWAP_R0			6Ah
+#define SWAP_R1			6Bh
+#define SWAP_R2			6Ch
+#define SWAP_R3			6Dh
+#define SWAP_R4			6Eh
+#define SWAP_R5			6Fh
+#define SWAP_R6			70h
+#define SWAP_R7			71h
+#define SWAP_DPL		72h
+#define SWAP_DPH		73h
 
-#DEFINE SWAP_UINT32_00	74h
-#DEFINE SWAP_UINT32_01	75h
-#DEFINE SWAP_UINT32_02	76h
-#DEFINE SWAP_UINT32_03	77h
+#define SWAP_UINT32_00	74h
+#define SWAP_UINT32_01	75h
+#define SWAP_UINT32_02	76h
+#define SWAP_UINT32_03	77h
 
-#DEFINE SWAP_UINT32_10	78h
-#DEFINE SWAP_UINT32_11	79h
-#DEFINE SWAP_UINT32_12	7Ah
-#DEFINE SWAP_UINT32_13	7Bh
+#define SWAP_UINT32_10	78h
+#define SWAP_UINT32_11	79h
+#define SWAP_UINT32_12	7Ah
+#define SWAP_UINT32_13	7Bh
 
-#DEFINE SWAP_PSW		7Ch
+#define SWAP_PSW		7Ch
+
+; ============================================================================
+
+; REACTION
+; register-based variables
+#define REACTION_INPUT			p1
+#define REACTION_TEST_VALUE		r0
+#define REACTION_OUTPUT			p3
+#define REACTION_RETURN_VALUE 	r1
+#define REACTION_CODE_LESS_100	#1h
+#define REACTION_CODE_100		#3h
+#define REACTION_CODE_100_200	#0h
+#define REACTION_CODE_200_PLUS	#2h
 
 ; ============================================================================
 
 ; CLOCK
 ; memory addresses
-#DEFINE CLOCK_HOURS_PTR			#40h
-#DEFINE CLOCK_MINUTES_PTR		#41h
-#DEFINE CLOCK_SECONDS_PTR		#42h
-#DEFINE CLOCK_MAX_HOURS_PTR		#43h
-#DEFINE CLOCK_MAX_MINUTES_PTR	#44h
-#DEFINE CLOCK_MAX_SECONDS_PTR	#45h
-#DEFINE CLOCK_TICK_COUNTER		46h		
+#define CLOCK_HOURS_PTR			#50h
+#define CLOCK_MINUTES_PTR		#51h
+#define CLOCK_SECONDS_PTR		#52h
+#define CLOCK_MAX_HOURS_PTR		#53h
+#define CLOCK_MAX_MINUTES_PTR	#54h
+#define CLOCK_MAX_SECONDS_PTR	#55h
+#define CLOCK_TICK_COUNTER		56h		
 
 ; constants
-#DEFINE CLOCK_MAX_HOURS			#23d
-#DEFINE CLOCK_MAX_MINUTES		#59d
-#DEFINE CLOCK_MAX_SECONDS		#59d
+#define CLOCK_MAX_HOURS			#23d
+#define CLOCK_MAX_MINUTES		#59d
+#define CLOCK_MAX_SECONDS		#59d
 ; 100 at 100Hz = 1s
-#DEFINE CLOCK_TICK_RESET_VALUE	#100d
+#define CLOCK_TICK_RESET_VALUE	#100d
 
 ; ============================================================================
 
 ; TEMPERATURE
 ; memory addresses
-#DEFINE TEMPERATURE_RING_BUFFER		#50h
-#DEFINE TEMPERATURE_TICKS			5Ah
-#DEFINE TEMPERATURE_AVERAGE			5Bh
-#DEFINE TEMPERATURE_DRIFT			5Ch
-#DEFINE TEMPERATURE_RING_BUFFER_PTR	5Dh
-#DEFINE TEMPERATURE_SUM_LOW			5Eh
-#DEFINE TEMPERATURE_SUM_HIGH		5Fh
+#define TEMPERATURE_RING_BUFFER		#58h
+#define TEMPERATURE_TICKS			62h
+#define TEMPERATURE_AVERAGE			63h
+#define TEMPERATURE_DRIFT			64h
+#define TEMPERATURE_RING_BUFFER_PTR	65h
+#define TEMPERATURE_SUM_LOW			66h
+#define TEMPERATURE_SUM_HIGH		67h
 
 ; constants
-#DEFINE TEMPERATURE_RING_BUFFER_SIZE	#10d
+#define TEMPERATURE_RING_BUFFER_SIZE	#10d
 ; 10 at 1Hz = 10s
-#DEFINE TEMPERATURE_TICKS_RESET_VALUE	#10d
-#DEFINE TEMPERATURE_DRIFT_FALLING		#0d
-#DEFINE TEMPERATURE_DRIFT_RISING		#1d
-#DEFINE TEMPERATURE_DRIFT_STEADY		#ffh
+#define TEMPERATURE_TICKS_RESET_VALUE	#10d
+#define TEMPERATURE_DRIFT_FALLING		#0d
+#define TEMPERATURE_DRIFT_RISING		#1d
+#define TEMPERATURE_DRIFT_STEADY		#ffh
 
 ; ============================================================================
 
 ; SORT
-; constants
-#DEFINE SORT_TRUE 		#ffh
-#DEFINE SORT_FALSE		#00h
 
 ; variable registers
-#DEFINE SORT_SWAPPED	b
-#DEFINE SORT_I_HIGH		r5
-#DEFINE SORT_I_LOW		r4
-#DEFINE SORT_J_HIGH		r3
-#DEFINE SORT_J_LOW		r2
-#DEFINE SORT_CURRENT	r1
-#DEFINE SORT_PREVIOUS	r0
+#define SORT_SWAPPED	b
+#define SORT_I_HIGH		r5
+#define SORT_I_LOW		r4
+#define SORT_J_HIGH		r3
+#define SORT_J_LOW		r2
+#define SORT_CURRENT	r1
+#define SORT_PREVIOUS	r0
 
 ; recursive direct address mode definition for variable i
 ; must be able to move register to register
-#DEFINE SORT_I_LOW_DIRECT DIRECT_R4
-#DEFINE SORT_I_HIGH_DIRECT DIRECT_R5
-#DEFINE SORT_CURRENT_DIRECT DIRECT_R1
+#define SORT_I_LOW_DIRECT DIRECT_R4
+#define SORT_I_HIGH_DIRECT DIRECT_R5
+#define SORT_CURRENT_DIRECT DIRECT_R1
 
 ; ============================================================================
 ; <!-------------------- NO DEFINITIONS BELOW THIS LINE -------------------->
 ; ============================================================================
 
 ; must be up here if we want to preserve the MEMORY SETUP documentation
-; the pre-assembler will strip everything until the first non-comment or #DEFINE
+; the pre-assembler will strip everything until the first non-comment or #define
 ; so you won't see this comment in the generated code :)
 #cpu = 89S8252    ; @12 MHz
 #use LCALL
@@ -146,21 +209,21 @@
 ;  --------------+-------+-------+------+----------------------------------------------
 ;  STACK         | 0x8	 | 0x2f	 | 24   | stack
 ;  --------------+-------+-------+------+----------------------------------------------
-;  RAM 1	  	 | 0x30	 | 0x3f	 | 16   | RAM for Task 1: Scheduler
+;  RAM S	  	 | 0x30	 | 0x4f	 | 32   | RAM for Scheduler
 ;  --------------+-------+-------+------+----------------------------------------------
-;  RAM 2    	 | -	 | -	 | 0    | RAM for Task 2: Reaction (allocation free)
+;  RAM 1    	 | -	 | -	 | 0    | RAM for Task 1: Reaction (allocation free)
 ;  --------------+-------+-------+------+----------------------------------------------
-;  RAM 3	  	 | 0x40	 | 0x4f	 | 16   | RAM for Task 3: Clock
+;  RAM 2	  	 | 0x50	 | 0x57	 | 8    | RAM for Task 2: Clock
 ;  --------------+-------+-------+------+----------------------------------------------
-;  RAM 3B	  	 | 0x50	 | 0x5f	 | 16   | RAM for Task 3B: Temperature
+;  RAM 3	  	 | 0x58	 | 0x67	 | 16   | RAM for Task 3: Temperature
 ;  --------------+-------+-------+------+----------------------------------------------
-;  RAM 4  	 	 | 0x60	 | 0x67  | 8    | RAM for Task 4: Sorting
+;  RAM 0  	 	 | -	 | -     | 0    | RAM for Task 0: Sorting (allocation free)
 ;  --------------+-------+-------+------+----------------------------------------------
 ;  SWAP 		 | 0x68	 | 0x7f	 | 24   | swap area for execution context
 
-; < 10 ms @12 MHz <=> 0.01 s / cycle @12,000,000Hz @ ~2cycles / instruction 
-; => ~60,000 instructions per interrupt
-; more than enough for basically all tasks to run to completion (except sorting task)
+; < 10 ms @1 MHz (cycles) <=> 0.01 s / cycle @1,000,000Hz @ ~2cycles / instruction 
+; => ~5,000 instructions per interrupt
+; probably more than enough for basically all tasks to run to completion (except sorting task)
 ; => use single stack for all tasks!
 ; expected program flow:
 ; init -> 
@@ -180,56 +243,221 @@ Timer 0:    ; Timer 0 Interrupt
 Initialize:
 	; setup stack
 	mov	SP, STACK_START
-
-	; reset clock tick counter
-	lcall ResetTicks
-
-	orl TMOD, # 02h    ; Timer 0 im 8-Bit Autoreload-Modus. 
-	; Die �berlauffrequenz des Timer 0 betr�gt 4000 Hz, die Periodendauer 0,25 ms.
-	mov TH0, # 06h    ; Reloadwert
+	; Timer 0 in 8-bit autoreload mode.
+	orl TMOD, TIMER_MODE
+	; The overflow frequency of the timer 0 is 4000 Hz, the period duration 0.25 ms.
+	mov TH0, TIMER_RELOAD_VALUE
+	; Timer 0 ticks at 1 MHz
+	; reset timer to reload value
+	mov TIMER_VALUE, TIMER_RELOAD_VALUE
 
 	; Interrupts
 	setb ET0    ; Timer 0 Interrupt freigeben
-	setb EA    ; globale Interruptfreigabe
-	setb TR0    ; Timer 0 l�uft.
+	setb EA    	; globale Interruptfreigabe
+	
+	; initialize monitoring
+	lcall MON_Init
+
+	;reset clock tick counter
+	lcall ResetInterruptCounter
 
 	; initialize clock
 	lcall Clock_Init
 	lcall Temperature_Init
 
+	; setup monitoring variables for task 0 (sorting)
+	mov T0_RESUMED_INTERRUPT_COUNT, INTERRUPT_COUNT_RESET_VALUE
+	; actually + time needed for setb and lcall
+	mov T0_RESUMED_TIMER_VALUE, TIMER_RELOAD_VALUE
+
+	setb TR0    ; start Timer 0
 	; run sorting task by default
 	lcall Sort_Notify
+	end
 
-	end ; <- return adderss on first interrupt
-; * * * Hauptprogramm Ende * * *
-
-; if (--tick_counter == 0) 
+; if (--interruptCounter == 0) 
 ; {
-; 	  ResetTicks();
-;	  TasksNofityAll();
+; 	  ResetInterruptCounter();
+;	  TasksNotifyAll();
 ; }
 OnTick:
+	; T0 overflowed. T0 will be 06h (reset value) here.
 	; can not use registers here, execution context is not yet stored
-	djnz TICK_COUNTER, __OnTick_End
+	djnz INTERRUPT_COUNT, __OnTick_End
+	; store execution context
+	lcall EXC_STORE
+	; immediately re-enable timer 0 interrupt (allow interrupting itself for accurate monitoring)
+	; as we NEED to count timer overflows to "allow time to pass" while running all the tasks.
+	lcall RestoreInterruptLogic
+	; stop measurement of T0 task
+	; t0ElapsedTimerTicks += t0ResumedInterruptCount * 242 - (t0ResumedTimerValue - timerReloadValue) - t0Correction
+	mov r2, T0_CTR32_PTR
+	push DIRECT_R2			; push uint32_t* pCounterTask0 to stack
+	; t0ResumedInterrupts * 242 - (t0ResumedTimerValue - timerReloadValue)
+	clr c
+	mov a, T0_RESUMED_TIMER_VALUE	; t0ResumedTimerValue to a
+	subb a, TIMER_RELOAD_VALUE		; t0ResumedTimerValue - timerReloadValue
+	mov r1, a						; r1 = (t0ResumedTimerValue - (timerReloadValue + 2))
+	clr c
+	mov a, T0_RESUMED_INTERRUPT_COUNT	; a = t0ResumedInterrupts
+	mov b, ACTIVE_CYCLES_PER_INTERRUPT	; b = activeCycles (242)
+	mul ab								; t0ResumedInterrupts * 242
+	clr c
+	subb a, r1						; (t0ResumedInterrupts * 242) - (t0ResumedTimerValue - timerReloadValue)
+	xch a, b 
+	subb a, #0						; handle carry / borrow
+	xch a, b
+	; t0ResumedInterrupts * 242 - (t0ResumedTimerValue - timerReloadValue) - t0Correction
+	clr c
+	subb a, T0_CORRECTION			; apply correction
+	mov r2, a
+	push DIRECT_R2					; push low elapsed to stack
+	mov a, b
+	subb a, #0						; handle carry / borrow
+	mov r2, a
+	push DIRECT_R2					; push high elapsed to stack
+	lcall Add32_Dyn 				; 32 bit + 16 bit addition and store to uint32_t* pCounterTask0
 	; 10 ms elapsed -> let all tasks run
-	lcall ResetTicks
-	lcall TasksNofityAll
+	lcall ResetInterruptCounter
+	lcall TasksNotifyAll
+	; restore execution context
+	lcall EXC_RESTORE
+	; resume measurement of T0 task
+	; locking would be great here :P
+	mov T0_RESUMED_INTERRUPT_COUNT, INTERRUPT_COUNT		; snap copy of current tick counter
+	mov T0_RESUMED_TIMER_VALUE, TIMER_VALUE	; snap copy of current timer value
+	ret
 __OnTick_End:
 	reti
 
-TasksNofityAll:
-	; store execution context
-	lcall EXC_STORE
+; re-enables interrupts by abusing the reti instruction
+; allows Timer 0 to interrupt the interrupt handling logic invoked by a Timer 0 interrupt (:
+RestoreInterruptLogic:
+	reti
+
+TasksNotifyAll:
 	; notify all tasks
+	; <--------- TASK 1 --------->
+	lcall MON_StartMeasurement	; start measurement of reaction task
 	lcall Reaction_Notify
+	lcall MON_StopMeasurement	; stop measurement
+	; load target address of 32bit reaction time counter
+	mov r0, T1_CTR32_PTR
+	push DIRECT_R0
+	lcall MON_StoreMeasurement	; store measuement
+	; <--------- TASK 2 --------->
+	lcall MON_StartMeasurement	; start measurement of clock task
 	lcall Clock_Notify
-	; restore execution context
-	lcall EXC_RESTORE
+	; return value of Clock (secondElapsed = true|false) to r4 (r4 is not used by monitoring)
+	pop DIRECT_R4
+	lcall MON_StopMeasurement	; stop measurement
+	; load target address of 32bit clock time counter
+	mov r0, T2_CTR32_PTR
+	push DIRECT_R0
+	lcall MON_StoreMeasurement	; store measuement
+	; <--------- TASK 3 --------->
+	lcall MON_StartMeasurement	; start measurement of temperature task
+	; Clock_Notify returns true (0xff) or false (0x00) depending on whether a second has passed.
+	; these checks were inlined for performance reasons (short path is only 3 cycles).
+	mov a, r4					; load return value of clock
+	jz __TasksNotifyAll_SkipTemperature
+	lcall Temperature_Notify	; temperature logic is notified every second.
+__TasksNotifyAll_SkipTemperature:
+	lcall MON_StopMeasurement	; stop measurement
+	; load target address of 32bit temperature time counter
+	mov r0, T3_CTR32_PTR
+	push DIRECT_R0
+	lcall MON_StoreMeasurement	; store measuement
 	ret
 
-; reset ticks
-ResetTicks:
-	mov TICK_COUNTER, TICK_RESET_VALUE
+; reset interrupt counter
+ResetInterruptCounter:
+	mov INTERRUPT_COUNT, INTERRUPT_COUNT_RESET_VALUE
+	ret
+
+; sets all monitoring counters to 0
+MON_Init:
+	; MemSet(monitoringBasePtr, 16, 0);
+	mov r0, MONITORING_BASE_PTR	; load base pointer of counter region
+	push DIRECT_R0				; push to stack
+	mov r0, #16					; load size of counter region
+	push DIRECT_R0				; push to stack
+	mov r0, #0					; load target value = 0
+	push DIRECT_R0				; push to stack
+	lcall MemSet				; call memset
+	ret
+
+; starts a measurement by creating a snapshot of the current timer state
+; locking would be nice here, to prevent interrupts from changing the interruptCounter
+MON_StartMeasurement:
+	mov TX_START_INTERRUPT_COUNT, INTERRUPT_COUNT		; store interruptCounter
+	mov TX_START_TIMER_VALUE, TIMER_VALUE				; store timerValue
+	ret
+
+; snap a copy of the current interruptCounter and currentTimerValue (timer state). 
+; locking would be nice here, to prevent interrupts from changing the interruptCounter
+MON_StopMeasurement:
+	mov r0, TIMER_VALUE
+	mov r1, INTERRUPT_COUNT
+	; store return address
+	pop DIRECT_R7
+	pop DIRECT_R6
+	; push result
+	push DIRECT_R0			; push timerValue
+	push DIRECT_R1			; push interruptCounter
+	; restore return address
+	push DIRECT_R6
+	push DIRECT_R7
+	ret
+
+; void MON_StoreMeasurement(uint8_t timerValue, uint8_t interruptCounter, uint32_t* pCounter);
+; 	*pCounter += (startInterruptCounter - interruptCounter) * 242 + timerValue - startTimerValue - correctionConstant;
+MON_StoreMeasurement:
+	; store our return address
+	pop DIRECT_R7
+	pop DIRECT_R6
+	; pop parameters but leave pCounter on the stack
+	pop DIRECT_R2				; pCounter to r2
+	pop DIRECT_R1				; current interruptCounter to r1
+	pop DIRECT_R0				; current timerValue to r0
+	; restore return address
+	push DIRECT_R6
+	push DIRECT_R7
+	; pCounter is first parameter for Add32_Dyn
+	push DIRECT_R2				; push pCounter back to stack
+	; (startInterruptCounter - interruptCounter)
+	mov a, TX_START_INTERRUPT_COUNT
+	clr c
+	subb a, r1					; assume no underflow here :)
+	; explaination: an underflow here would mean more than 10ms have passed for this task
+	; that would mean that something else is totally borked :P
+	; this would also violate the very concept of our scheduling machanism and is something
+	; we're just not gonna talk about :)
+	; (startInterruptCounter - interruptCounter) * 242 
+	mov b, ACTIVE_CYCLES_PER_INTERRUPT
+	mul ab
+	; (startInterruptCounter - interruptCounter) * 242 + timerValue
+	add a, r0
+	xch a, b
+	addc a, #0
+	xch a, b
+	; (startInterruptCounter - interruptCounter) * 242 + timerValue - startTimerValue;
+	clr c
+	subb a, TX_START_TIMER_VALUE
+	xch a, b
+	subb a, #0
+	xch a, b
+	; apply correctionConstant
+	clr c
+	subb a, MONITORING_CORRECTION
+	mov r2, a
+	push DIRECT_R2
+	mov a, b
+	subb a, #0
+	mov r2, a
+	push DIRECT_R2
+	;*pCounter += (startInterruptCounter - interruptCounter) * 242 + timerValue - startTimerValue - correctionConstant;
+	lcall Add32_Dyn				; 32-bit + 16-bit addition
 	ret
 
 ; stores the execution context in the swap area
@@ -288,6 +516,62 @@ EXC_RESTORE:
 	mov psw, SWAP_PSW
 	ret
 
+; adds the UINT32_0 to UINT32_1 and stores the result in UINT32_0
+; void Add32();
+Add32:
+	; byte 0
+	mov a, UINT32_00		; load byte 0 (low byte) of UINT32_0 to a
+	add a, UINT32_10		; add byte 0 (low byte) of UINT32_1 to byte 0 of UINT32_0
+	mov UINT32_00, a		; store result in UINT32_0 low byte
+	; byte 1
+	mov a, UINT32_01		; load byte 1 of UINT32_0 to a
+	addc a, UINT32_11		; add byte 1 of UINT32_1 to byte 1 of UINT32_0
+	mov UINT32_01, a		; store result in UINT32_0 byte 1
+	; byte 2
+	mov a, UINT32_02		; load byte 2 of UINT32_0 to a
+	addc a, UINT32_12		; add byte 2 of UINT32_1 to byte 2 of UINT32_0
+	mov UINT32_02, a		; store result in UINT32_0 byte 2
+	; byte 3
+	mov a, UINT32_03		; load byte 3 of UINT32_0 to a
+	addc a, UINT32_13		; add byte 3 of UINT32_1 to byte 3 of UINT32_0
+	mov UINT32_03, a		; store result in UINT32_0 byte 3
+	ret
+
+; Adds the summand to dynamically provided *pvalue and stores the result in *pvalue;
+; void Add32_Dyn(uint32_t* pvalue, uint8_t summandLow, uint8_t summandHigh);
+;     *value += summand;
+Add32_Dyn:
+	; store our return address
+	pop DIRECT_R7			; high byte to r7
+	pop DIRECT_R6			; low byte to r6
+	; now get parameters
+	pop DIRECT_R2			; summandHigh to r2
+	pop DIRECT_R1			; summandLow to r1
+	pop DIRECT_R0			; pvalue to r0
+	; restore return address
+	push DIRECT_R6
+	push DIRECT_R7
+	; byte 0
+	mov a, r1
+	add a, @r0
+	mov @r0, a
+	inc r0
+	; byte 1
+	mov a, r2
+	addc a, @r0
+	mov @r0, a
+	inc r0
+	; byte 2
+	mov a, #0
+	addc a, @r0
+	mov @r0, a
+	inc r0
+	; byte 3
+	mov a, #0
+	addc a, @r0
+	mov @r0, a
+	ret
+
 ; modifies a, b, r0-r3
 ; void ShiftLeft32(uint32_t* value, byte count);
 ShiftLeft32:
@@ -332,73 +616,31 @@ __ShiftLeft32_End:
 	push DIRECT_R3			; high byte to stack
 	ret
 
-; modifies a, b, r0-r3
-; void ShiftRight32(uint32_t* value, byte count);
-ShiftRight32:
+; void MemSet(void* ptr, uint8_t size, uint8_t value)
+MemSet:
 	; store our return address
-	pop DIRECT_R3			; high byte to r3
-	pop DIRECT_R2			; low byte to r2
+	pop DIRECT_R7			; high byte to r7
+	pop DIRECT_R6			; low byte to r6
 	; now get parameters
-	pop DIRECT_R1			; count to r1
-	pop DIRECT_R0			; uint32_t* to r0
-	; this time we need to start shifting at the highest byte
-	mov a, r0 				; uint32_t* to a
-	add a, #3				; add 3 to a to get pointer at highest byte
-	mov r0, a				; store pointer back to r0
-	mov b, a				; create backup of high byte pointer in b
-	; right left
-__ShiftRight32_Loop:
-	mov a, r1				; count to a
-	jz __ShiftRight32_End	; if count == 0, we are done
-	clr c					; clear carry
-	; byte 3
-	mov a, @r0				; get byte 3 (highest byte) of uint32_t value to a
-	rrc a					; rotate right through carry
-	mov @r0, a				; store result in uint32_t value
-	dec r0					; decrement pointer to next byte
-	; byte 2
-	mov a, @r0				; get byte 2 of uint32_t value to a
-	rrc a					; rotate right through carry
-	mov @r0, a				; store result in uint32_t value
-	dec r0					; decrement pointer to next byte
-	; byte 1
-	mov a, @r0				; get byte 1 of uint32_t value to a
-	rrc a					; rotate right through carry
-	mov @r0, a				; store result in uint32_t value
-	dec r0					; decrement pointer to next byte
-	; byte 0
-	mov a, @r0				; get byte 0 of uint32_t value to a
-	rrc a					; rotate right through carry
-	mov @r0, a				; store result in uint32_t value
-	mov r0, b				; restore uint32_t* from b
-	; decrement count and loop
-	dec r1
-	ljmp __ShiftRight32_Loop
-__ShiftRight32_End:
-	; now restore the return address
-	push DIRECT_R2			; low byte to stack
-	push DIRECT_R3			; high byte to stack
-	ret
-
-; adds the UINT32_0 to UINT32_1 and stores the result in UINT32_0
-; void Add32();
-Add32:
-	; byte 0
-	mov a, UINT32_00		; load byte 0 (low byte) of UINT32_0 to a
-	add a, UINT32_10		; add byte 0 (low byte) of UINT32_1 to byte 0 of UINT32_0
-	mov UINT32_00, a		; store result in UINT32_0 low byte
-	; byte 1
-	mov a, UINT32_01		; load byte 1 of UINT32_0 to a
-	addc a, UINT32_11		; add byte 1 of UINT32_1 to byte 1 of UINT32_0
-	mov UINT32_01, a		; store result in UINT32_0 byte 1
-	; byte 2
-	mov a, UINT32_02		; load byte 2 of UINT32_0 to a
-	addc a, UINT32_12		; add byte 2 of UINT32_1 to byte 2 of UINT32_0
-	mov UINT32_02, a		; store result in UINT32_0 byte 2
-	; byte 3
-	mov a, UINT32_03		; load byte 3 of UINT32_0 to a
-	addc a, UINT32_13		; add byte 3 of UINT32_1 to byte 3 of UINT32_0
-	mov UINT32_03, a		; store result in UINT32_0 byte 3
+	pop DIRECT_R2			; value to r2
+	pop DIRECT_R1			; size to r1
+	pop DIRECT_R0			; ptr to r0
+	; restore return address
+	push DIRECT_R6
+	push DIRECT_R7
+	; calculate stop address for memset (ptr + size)
+	mov a, r1
+	add a, r0
+	mov r1, a				; boundary address to r1
+__MemSet_Loop:
+	mov a, r1
+	xrl a, r0
+	jz __MemSet_LoopEnd
+	mov a, r2
+	mov @r0, a
+	inc r0
+	ljmp __MemSet_Loop
+__MemSet_LoopEnd:
 	ret
 
 ; ============================================================================
@@ -411,27 +653,33 @@ Add32:
 ; 0,0: 100 < Wert < 200
 ; 1,0 : Wert >= 200
 Reaction_Notify:
-	mov r0, p1					; take snapshot of port 1
-	mov r1, #1h					; store return value in r1, assume value < 100
+	; take snapshot of port 1
+	mov REACTION_TEST_VALUE, REACTION_INPUT
+	; store return value in r1, assume value < 100
+	mov REACTION_RETURN_VALUE, REACTION_CODE_LESS_100
 	; compare against < 100
-	mov a, #99d
 	clr c
-	subb a, r0					; subtract value from 99
+	mov a, #99d
+	subb a, REACTION_TEST_VALUE	; subtract value from 99
 	jnc __Reaction_NotifyEnd	; if no carry, value is <= 99
-	mov r1, #3h					; value is > 99, assume value == 100
+	; value is > 99, assume value == 100
+	mov REACTION_RETURN_VALUE, REACTION_CODE_100
 	; compare against 100
 	mov a, #100d
-	xrl a, r0					; xor value with 100
+	xrl a, REACTION_TEST_VALUE	; xor value with 100
 	jz __Reaction_NotifyEnd		; if zero, value is 100
-	mov r1, #0h					; value is > 100, assume value < 200
+	; value is > 100, assume value < 200
+	mov REACTION_RETURN_VALUE, REACTION_CODE_100_200
 	; compare against < 200
-	mov a, #199d
 	clr c
-	subb a, r0					; subtract value from 199
+	mov a, #199d
+	subb a, REACTION_TEST_VALUE	; subtract value from 199
 	jnc __Reaction_NotifyEnd	; if no carry, value is <= 199
-	mov r1, #2h					; value is >= 200
+	; value is >= 200
+	mov REACTION_RETURN_VALUE, REACTION_CODE_200_PLUS					
 __Reaction_NotifyEnd:
-	mov p3, r1					; store return value in port 3
+	; store return value in port 3
+	mov REACTION_OUTPUT, REACTION_RETURN_VALUE	
 	ret
 
 ; ============================================================================
@@ -441,35 +689,48 @@ __Reaction_NotifyEnd:
 ; initializes the clock
 Clock_Init:
 	mov r0, CLOCK_HOURS_PTR
-	mov @r0, #00h				; hours
+	mov @r0, #00h				; *hours = 0
 	mov r0, CLOCK_MINUTES_PTR
-	mov @r0, #00h				; minutes
+	mov @r0, #00h				; *minutes = 0
 	mov r0, CLOCK_SECONDS_PTR
-	mov @r0, #00h				; seconds
+	mov @r0, #00h				; *seconds = 0
 	mov r0, CLOCK_MAX_HOURS_PTR
-	mov @r0, CLOCK_MAX_HOURS
+	mov @r0, CLOCK_MAX_HOURS	; *maxHours = 23
 	mov r0, CLOCK_MAX_MINUTES_PTR
-	mov @r0, CLOCK_MAX_MINUTES
+	mov @r0, CLOCK_MAX_MINUTES	; *maxMinutes = 59
 	mov r0, CLOCK_MAX_SECONDS_PTR
-	mov @r0, CLOCK_MAX_SECONDS
+	mov @r0, CLOCK_MAX_SECONDS	; *maxSeconds = 59
 	lcall Clock_ResetTicks
 	ret
 
+; returns true if a second has elapsed.
+; bool Clock_Notify()
 ; if (--clock_tick_counter == 0) 
 ; {
 ; 	  Clock_ResetTicks();
 ;	  Clock_OnEachSecond();
-;  	  Temperature_Notify();
+; 	  return true; 
 ; }
+; return false; 
 Clock_Notify:
+	mov r0, FALSE				; assume false by default
 	djnz CLOCK_TICK_COUNTER, __Clock_NotifyEnd
 	; a second has elapsed
 	lcall Clock_ResetTicks
 	lcall Clock_OnEachSecond
-	lcall Temperature_Notify
+	mov r0, TRUE				; a second has elapsed -> return true
 __Clock_NotifyEnd:
+	; store return address
+	pop DIRECT_R7
+	pop DIRECT_R6
+	; push return value
+	push DIRECT_R0
+	; restore return address
+	push DIRECT_R6
+	push DIRECT_R7
 	ret
 
+; resets clock 10ms-tick-counter to 100.
 Clock_ResetTicks:
 	mov CLOCK_TICK_COUNTER, CLOCK_TICK_RESET_VALUE
 	ret
@@ -665,29 +926,14 @@ Temperature_Init:
 	; set drift to "steady" for now
 	mov TEMPERATURE_DRIFT, TEMPERATURE_DRIFT_STEADY
 	; clear temperature buffer (all 0)
-
-	; buffer--; // loop breaks before setting the first element :P
-	; int i = buffer.Length + 1; // loop pre-decrements (add offset from previous line)
-	; do 
-	; {
-	;	  if (--i == 0) break; 
-	; 	  buffer[i] = 0;
-	; } 
-	; while (i > 0);
+	; Memset(baseAddress, size, 0);
 	mov r2, TEMPERATURE_RING_BUFFER 		; load ring buffer base address to r2
-	dec r2									; dumb offset to get the first element
-	mov r1, TEMPERATURE_RING_BUFFER_SIZE	; load buffer size to r1 (loop counter)
-	inc r1									; add 1 to r1 (loop counter)
-__Temperature_InitLoopHeader:
-	djnz r1, __Temperature_InitLoop
-	jmp __Temperature_InitLoopBreak
-__Temperature_InitLoop:
-	mov a, r2								; load ring buffer base address to a
-	add a, r1								; add offfset to base address to a
-	mov r0, a								; target address to r0
-	mov @r0, #0								; set element to 0
-	ljmp __Temperature_InitLoopHeader		; loop
-__Temperature_InitLoopBreak:
+	push DIRECT_R2							; push to stack
+	mov r2, TEMPERATURE_RING_BUFFER_SIZE	; load buffer size
+	push DIRECT_R2							; push to stack
+	mov r2, #0								; load target value
+	push DIRECT_R2							; push to stack
+	lcall MemSet							; call memset
 	ret
 
 ; notifies the temperature sensor that a second has elapsed
@@ -791,7 +1037,7 @@ Temperature_16BitDivideBy10:
 	; we start by multiplying the sum by 0xcccd.
 	; the 0xcccd magic number was determined by C# compiler optimization.
 	; see: https://sharplab.io/#v2:EYLgxg9gTgpgtADwGwBYA0AXEBDAzgWwB8ABAJgEYBYAKGIGYACMhgYQZoG8aGenGBXAJYA7DAwAiggG4AhAJ7kADAAohohlOwAbfjACU7arwZcjx3sQDsG7boYB6Bkv4BubrwC+ND0A
-	; finally the result is shifted right by 19 bits (thogh we'll do some pointer magic to reduce operations).
+	; finally the result is shifted right by 19 bits (though we'll do some pointer magic to reduce operations).
 	; also we can't multiply by 0xcccd on hardware, so we have to do that manually too oO
 	; all of this is the same as dividing the 16 bit sum by 10.
 	
@@ -956,7 +1202,7 @@ Temperature_LoadSumToUINT32_1:
 ; end procedure
 
 ; our adaptation:
-;void Bubblesort(uint8_t *array, uint16_t length)
+;void bubble_sort(uint8_t* xram, uint16_t length = 0xffff)
 ;{
 ;	uint8_t swapped = true;
 ;	while (swapped != false)
@@ -964,14 +1210,14 @@ Temperature_LoadSumToUINT32_1:
 ;		swapped = false;
 ;		uint16_t i = 1;
 ;		uint16_t j = i - 1;
-;		uint8_t previous = array[j];
+;		uint8_t previous = xram[j];
 ;		while (j != length)
 ;		{
-;			uint8_t current = array[i];
+;			uint8_t current = xram[i];
 ;			if (current - previous < 0)
 ;			{
-;				array[i] = previous;
-;				array[j] = current;
+;				xram[i] = previous;
+;				xram[j] = current;
 ;				swapped = true;
 ;			}
 ;			else
@@ -996,12 +1242,12 @@ Temperature_LoadSumToUINT32_1:
 
 ; called only once, when the program starts
 Sort_Notify:
-	mov SORT_SWAPPED, SORT_TRUE		; uint8_t swapped = true;
+	mov SORT_SWAPPED, TRUE		; uint8_t swapped = true;
 __Sort_Notify_OuterLoop:
 	; while (swapped != false)
 	mov a, SORT_SWAPPED
 	jz __Sort_Notify_OuterBreak
-	mov SORT_SWAPPED, SORT_FALSE	; swapped = false;
+	mov SORT_SWAPPED, FALSE	; swapped = false;
 	; uint16_t i = 1;
 	mov SORT_I_LOW, #1				;  r5 (i low)
 	mov SORT_I_HIGH, #0				;  r6 (i high)
@@ -1042,7 +1288,7 @@ __Sort_Notify_InnerLoop:
 	mov a, SORT_CURRENT		; load current value
 	movx @dptr, a			; write current value to previous location
 	; remember we swapped something (swapped = true);
-	mov SORT_SWAPPED, SORT_TRUE	
+	mov SORT_SWAPPED, TRUE	
 	ljmp __Sort_Notify_Continue
 __Sort_Notify_NoSwap:
 	; if we didn't swap anything, we need to update the previous value

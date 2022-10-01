@@ -11,21 +11,21 @@
 ;  --------------+-------+-------+------+----------------------------------------------
 ;  STACK         | 0x8	 | 0x2f	 | 24   | stack
 ;  --------------+-------+-------+------+----------------------------------------------
-;  RAM 1	  	 | 0x30	 | 0x3f	 | 16   | RAM for Task 1: Scheduler
+;  RAM S	  	 | 0x30	 | 0x4f	 | 32   | RAM for Scheduler
 ;  --------------+-------+-------+------+----------------------------------------------
-;  RAM 2    	 | -	 | -	 | 0    | RAM for Task 2: Reaction (allocation free)
+;  RAM 1    	 | -	 | -	 | 0    | RAM for Task 1: Reaction (allocation free)
 ;  --------------+-------+-------+------+----------------------------------------------
-;  RAM 3	  	 | 0x40	 | 0x4f	 | 16   | RAM for Task 3: Clock
+;  RAM 2	  	 | 0x50	 | 0x57	 | 8    | RAM for Task 2: Clock
 ;  --------------+-------+-------+------+----------------------------------------------
-;  RAM 3B	  	 | 0x50	 | 0x5f	 | 16   | RAM for Task 3B: Temperature
+;  RAM 3	  	 | 0x58	 | 0x67	 | 16   | RAM for Task 3: Temperature
 ;  --------------+-------+-------+------+----------------------------------------------
-;  RAM 4  	 	 | 0x60	 | 0x67  | 8    | RAM for Task 4: Sorting
+;  RAM 0  	 	 | -	 | -     | 0    | RAM for Task 0: Sorting (allocation free)
 ;  --------------+-------+-------+------+----------------------------------------------
 ;  SWAP 		 | 0x68	 | 0x7f	 | 24   | swap area for execution context
 
-; < 10 ms @12 MHz <=> 0.01 s / cycle @12,000,000Hz @ ~2cycles / instruction 
-; => ~60,000 instructions per interrupt
-; more than enough for basically all tasks to run to completion (except sorting task)
+; < 10 ms @1 MHz (cycles) <=> 0.01 s / cycle @1,000,000Hz @ ~2cycles / instruction 
+; => ~5,000 instructions per interrupt
+; probably more than enough for basically all tasks to run to completion (except sorting task)
 ; => use single stack for all tasks!
 ; expected program flow:
 ; init -> 
@@ -45,56 +45,221 @@ Timer 0:    ; Timer 0 Interrupt
 Initialize:
 	; setup stack
 	mov	SP, #07h
-
-	; reset clock tick counter
-	lcall ResetTicks
-
-	orl TMOD, # 02h    ; Timer 0 im 8-Bit Autoreload-Modus. 
-	; Die �berlauffrequenz des Timer 0 betr�gt 4000 Hz, die Periodendauer 0,25 ms.
-	mov TH0, # 06h    ; Reloadwert
+	; Timer 0 in 8-bit autoreload mode.
+	orl TMOD, #02h
+	; The overflow frequency of the timer 0 is 4000 Hz, the period duration 0.25 ms.
+	mov TH0, #06h
+	; Timer 0 ticks at 1 MHz
+	; reset timer to reload value
+	mov tl0, #06h
 
 	; Interrupts
 	setb ET0    ; Timer 0 Interrupt freigeben
-	setb EA    ; globale Interruptfreigabe
-	setb TR0    ; Timer 0 l�uft.
+	setb EA    	; globale Interruptfreigabe
+	
+	; initialize monitoring
+	lcall MON_Init
+
+	;reset clock tick counter
+	lcall ResetInterruptCounter
 
 	; initialize clock
 	lcall Clock_Init
 	lcall Temperature_Init
 
+	; setup monitoring variables for task 0 (sorting)
+	mov 3ah, #40d
+	; actually + time needed for setb and lcall
+	mov 39h, #06h
+
+	setb TR0    ; start Timer 0
 	; run sorting task by default
 	lcall Sort_Notify
+	end
 
-	end ; <- return adderss on first interrupt
-; * * * Hauptprogramm Ende * * *
-
-; if (--tick_counter == 0) 
+; if (--interruptCounter == 0) 
 ; {
-; 	  ResetTicks();
-;	  TasksNofityAll();
+; 	  ResetInterruptCounter();
+;	  TasksNotifyAll();
 ; }
 OnTick:
+	; T0 overflowed. T0 will be 06h (reset value) here.
 	; can not use registers here, execution context is not yet stored
 	djnz 38h, __OnTick_End
+	; store execution context
+	lcall EXC_STORE
+	; immediately re-enable timer 0 interrupt (allow interrupting itself for accurate monitoring)
+	; as we NEED to count timer overflows to "allow time to pass" while running all the tasks.
+	lcall RestoreInterruptLogic
+	; stop measurement of T0 task
+	; t0ElapsedTimerTicks += t0ResumedInterruptCount * 242 - (t0ResumedTimerValue - timerReloadValue) - t0Correction
+	mov r2, #40h
+	push 02h			; push uint32_t* pCounterTask0 to stack
+	; t0ResumedInterrupts * 242 - (t0ResumedTimerValue - timerReloadValue)
+	clr c
+	mov a, 39h	; t0ResumedTimerValue to a
+	subb a, #06h		; t0ResumedTimerValue - timerReloadValue
+	mov r1, a						; r1 = (t0ResumedTimerValue - (timerReloadValue + 2))
+	clr c
+	mov a, 3ah	; a = t0ResumedInterrupts
+	mov b, #242d	; b = activeCycles (242)
+	mul ab								; t0ResumedInterrupts * 242
+	clr c
+	subb a, r1						; (t0ResumedInterrupts * 242) - (t0ResumedTimerValue - timerReloadValue)
+	xch a, b 
+	subb a, #0						; handle carry / borrow
+	xch a, b
+	; t0ResumedInterrupts * 242 - (t0ResumedTimerValue - timerReloadValue) - t0Correction
+	clr c
+	subb a, #4d			; apply correction
+	mov r2, a
+	push 02h					; push low elapsed to stack
+	mov a, b
+	subb a, #0						; handle carry / borrow
+	mov r2, a
+	push 02h					; push high elapsed to stack
+	lcall Add32_Dyn 				; 32 bit + 16 bit addition and store to uint32_t* pCounterTask0
 	; 10 ms elapsed -> let all tasks run
-	lcall ResetTicks
-	lcall TasksNofityAll
+	lcall ResetInterruptCounter
+	lcall TasksNotifyAll
+	; restore execution context
+	lcall EXC_RESTORE
+	; resume measurement of T0 task
+	; locking would be great here :P
+	mov 3ah, 38h		; snap copy of current tick counter
+	mov 39h, tl0	; snap copy of current timer value
+	ret
 __OnTick_End:
 	reti
 
-TasksNofityAll:
-	; store execution context
-	lcall EXC_STORE
+; re-enables interrupts by abusing the reti instruction
+; allows Timer 0 to interrupt the interrupt handling logic invoked by a Timer 0 interrupt (:
+RestoreInterruptLogic:
+	reti
+
+TasksNotifyAll:
 	; notify all tasks
+	; <--------- TASK 1 --------->
+	lcall MON_StartMeasurement	; start measurement of reaction task
 	lcall Reaction_Notify
+	lcall MON_StopMeasurement	; stop measurement
+	; load target address of 32bit reaction time counter
+	mov r0, #44h
+	push 00h
+	lcall MON_StoreMeasurement	; store measuement
+	; <--------- TASK 2 --------->
+	lcall MON_StartMeasurement	; start measurement of clock task
 	lcall Clock_Notify
-	; restore execution context
-	lcall EXC_RESTORE
+	; return value of Clock (secondElapsed = true|false) to r4 (r4 is not used by monitoring)
+	pop 04h
+	lcall MON_StopMeasurement	; stop measurement
+	; load target address of 32bit clock time counter
+	mov r0, #48h
+	push 00h
+	lcall MON_StoreMeasurement	; store measuement
+	; <--------- TASK 3 --------->
+	lcall MON_StartMeasurement	; start measurement of temperature task
+	; Clock_Notify returns true (0xff) or false (0x00) depending on whether a second has passed.
+	; these checks were inlined for performance reasons (short path is only 3 cycles).
+	mov a, r4					; load return value of clock
+	jz __TasksNotifyAll_SkipTemperature
+	lcall Temperature_Notify	; temperature logic is notified every second.
+__TasksNotifyAll_SkipTemperature:
+	lcall MON_StopMeasurement	; stop measurement
+	; load target address of 32bit temperature time counter
+	mov r0, #4ch
+	push 00h
+	lcall MON_StoreMeasurement	; store measuement
 	ret
 
-; reset ticks
-ResetTicks:
+; reset interrupt counter
+ResetInterruptCounter:
 	mov 38h, #40d
+	ret
+
+; sets all monitoring counters to 0
+MON_Init:
+	; MemSet(monitoringBasePtr, 16, 0);
+	mov r0, #40h	; load base pointer of counter region
+	push 00h				; push to stack
+	mov r0, #16					; load size of counter region
+	push 00h				; push to stack
+	mov r0, #0					; load target value = 0
+	push 00h				; push to stack
+	lcall MemSet				; call memset
+	ret
+
+; starts a measurement by creating a snapshot of the current timer state
+; locking would be nice here, to prevent interrupts from changing the interruptCounter
+MON_StartMeasurement:
+	mov 3ch, 38h		; store interruptCounter
+	mov 3bh, tl0				; store timerValue
+	ret
+
+; snap a copy of the current interruptCounter and currentTimerValue (timer state). 
+; locking would be nice here, to prevent interrupts from changing the interruptCounter
+MON_StopMeasurement:
+	mov r0, tl0
+	mov r1, 38h
+	; store return address
+	pop 07h
+	pop 06h
+	; push result
+	push 00h			; push timerValue
+	push 01h			; push interruptCounter
+	; restore return address
+	push 06h
+	push 07h
+	ret
+
+; void MON_StoreMeasurement(uint8_t timerValue, uint8_t interruptCounter, uint32_t* pCounter);
+; 	*pCounter += (startInterruptCounter - interruptCounter) * 242 + timerValue - startTimerValue - correctionConstant;
+MON_StoreMeasurement:
+	; store our return address
+	pop 07h
+	pop 06h
+	; pop parameters but leave pCounter on the stack
+	pop 02h				; pCounter to r2
+	pop 01h				; current interruptCounter to r1
+	pop 00h				; current timerValue to r0
+	; restore return address
+	push 06h
+	push 07h
+	; pCounter is first parameter for Add32_Dyn
+	push 02h				; push pCounter back to stack
+	; (startInterruptCounter - interruptCounter)
+	mov a, 3ch
+	clr c
+	subb a, r1					; assume no underflow here :)
+	; explaination: an underflow here would mean more than 10ms have passed for this task
+	; that would mean that something else is totally borked :P
+	; this would also violate the very concept of our scheduling machanism and is something
+	; we're just not gonna talk about :)
+	; (startInterruptCounter - interruptCounter) * 242 
+	mov b, #242d
+	mul ab
+	; (startInterruptCounter - interruptCounter) * 242 + timerValue
+	add a, r0
+	xch a, b
+	addc a, #0
+	xch a, b
+	; (startInterruptCounter - interruptCounter) * 242 + timerValue - startTimerValue;
+	clr c
+	subb a, 3bh
+	xch a, b
+	subb a, #0
+	xch a, b
+	; apply correctionConstant
+	clr c
+	subb a, #6d
+	mov r2, a
+	push 02h
+	mov a, b
+	subb a, #0
+	mov r2, a
+	push 02h
+	;*pCounter += (startInterruptCounter - interruptCounter) * 242 + timerValue - startTimerValue - correctionConstant;
+	lcall Add32_Dyn				; 32-bit + 16-bit addition
 	ret
 
 ; stores the execution context in the swap area
@@ -153,6 +318,62 @@ EXC_RESTORE:
 	mov psw, 7Ch
 	ret
 
+; adds the UINT32_0 to UINT32_1 and stores the result in UINT32_0
+; void Add32();
+Add32:
+	; byte 0
+	mov a, 30h		; load byte 0 (low byte) of UINT32_0 to a
+	add a, 34h		; add byte 0 (low byte) of UINT32_1 to byte 0 of UINT32_0
+	mov 30h, a		; store result in UINT32_0 low byte
+	; byte 1
+	mov a, 31h		; load byte 1 of UINT32_0 to a
+	addc a, 35h		; add byte 1 of UINT32_1 to byte 1 of UINT32_0
+	mov 31h, a		; store result in UINT32_0 byte 1
+	; byte 2
+	mov a, 32h		; load byte 2 of UINT32_0 to a
+	addc a, 36h		; add byte 2 of UINT32_1 to byte 2 of UINT32_0
+	mov 32h, a		; store result in UINT32_0 byte 2
+	; byte 3
+	mov a, 33h		; load byte 3 of UINT32_0 to a
+	addc a, 37h		; add byte 3 of UINT32_1 to byte 3 of UINT32_0
+	mov 33h, a		; store result in UINT32_0 byte 3
+	ret
+
+; Adds the summand to dynamically provided *pvalue and stores the result in *pvalue;
+; void Add32_Dyn(uint32_t* pvalue, uint8_t summandLow, uint8_t summandHigh);
+;     *value += summand;
+Add32_Dyn:
+	; store our return address
+	pop 07h			; high byte to r7
+	pop 06h			; low byte to r6
+	; now get parameters
+	pop 02h			; summandHigh to r2
+	pop 01h			; summandLow to r1
+	pop 00h			; pvalue to r0
+	; restore return address
+	push 06h
+	push 07h
+	; byte 0
+	mov a, r1
+	add a, @r0
+	mov @r0, a
+	inc r0
+	; byte 1
+	mov a, r2
+	addc a, @r0
+	mov @r0, a
+	inc r0
+	; byte 2
+	mov a, #0
+	addc a, @r0
+	mov @r0, a
+	inc r0
+	; byte 3
+	mov a, #0
+	addc a, @r0
+	mov @r0, a
+	ret
+
 ; modifies a, b, r0-r3
 ; void ShiftLeft32(uint32_t* value, byte count);
 ShiftLeft32:
@@ -197,73 +418,31 @@ __ShiftLeft32_End:
 	push 03h			; high byte to stack
 	ret
 
-; modifies a, b, r0-r3
-; void ShiftRight32(uint32_t* value, byte count);
-ShiftRight32:
+; void MemSet(void* ptr, uint8_t size, uint8_t value)
+MemSet:
 	; store our return address
-	pop 03h			; high byte to r3
-	pop 02h			; low byte to r2
+	pop 07h			; high byte to r7
+	pop 06h			; low byte to r6
 	; now get parameters
-	pop 01h			; count to r1
-	pop 00h			; uint32_t* to r0
-	; this time we need to start shifting at the highest byte
-	mov a, r0 				; uint32_t* to a
-	add a, #3				; add 3 to a to get pointer at highest byte
-	mov r0, a				; store pointer back to r0
-	mov b, a				; create backup of high byte pointer in b
-	; right left
-__ShiftRight32_Loop:
-	mov a, r1				; count to a
-	jz __ShiftRight32_End	; if count == 0, we are done
-	clr c					; clear carry
-	; byte 3
-	mov a, @r0				; get byte 3 (highest byte) of uint32_t value to a
-	rrc a					; rotate right through carry
-	mov @r0, a				; store result in uint32_t value
-	dec r0					; decrement pointer to next byte
-	; byte 2
-	mov a, @r0				; get byte 2 of uint32_t value to a
-	rrc a					; rotate right through carry
-	mov @r0, a				; store result in uint32_t value
-	dec r0					; decrement pointer to next byte
-	; byte 1
-	mov a, @r0				; get byte 1 of uint32_t value to a
-	rrc a					; rotate right through carry
-	mov @r0, a				; store result in uint32_t value
-	dec r0					; decrement pointer to next byte
-	; byte 0
-	mov a, @r0				; get byte 0 of uint32_t value to a
-	rrc a					; rotate right through carry
-	mov @r0, a				; store result in uint32_t value
-	mov r0, b				; restore uint32_t* from b
-	; decrement count and loop
-	dec r1
-	ljmp __ShiftRight32_Loop
-__ShiftRight32_End:
-	; now restore the return address
-	push 02h			; low byte to stack
-	push 03h			; high byte to stack
-	ret
-
-; adds the UINT32_0 to UINT32_1 and stores the result in UINT32_0
-; void Add32();
-Add32:
-	; byte 0
-	mov a, 30h		; load byte 0 (low byte) of UINT32_0 to a
-	add a, 34h		; add byte 0 (low byte) of UINT32_1 to byte 0 of UINT32_0
-	mov 30h, a		; store result in UINT32_0 low byte
-	; byte 1
-	mov a, 31h		; load byte 1 of UINT32_0 to a
-	addc a, 35h		; add byte 1 of UINT32_1 to byte 1 of UINT32_0
-	mov 31h, a		; store result in UINT32_0 byte 1
-	; byte 2
-	mov a, 32h		; load byte 2 of UINT32_0 to a
-	addc a, 36h		; add byte 2 of UINT32_1 to byte 2 of UINT32_0
-	mov 32h, a		; store result in UINT32_0 byte 2
-	; byte 3
-	mov a, 33h		; load byte 3 of UINT32_0 to a
-	addc a, 37h		; add byte 3 of UINT32_1 to byte 3 of UINT32_0
-	mov 33h, a		; store result in UINT32_0 byte 3
+	pop 02h			; value to r2
+	pop 01h			; size to r1
+	pop 00h			; ptr to r0
+	; restore return address
+	push 06h
+	push 07h
+	; calculate stop address for memset (ptr + size)
+	mov a, r1
+	add a, r0
+	mov r1, a				; boundary address to r1
+__MemSet_Loop:
+	mov a, r1
+	xrl a, r0
+	jz __MemSet_LoopEnd
+	mov a, r2
+	mov @r0, a
+	inc r0
+	ljmp __MemSet_Loop
+__MemSet_LoopEnd:
 	ret
 
 ; ============================================================================
@@ -276,27 +455,33 @@ Add32:
 ; 0,0: 100 < Wert < 200
 ; 1,0 : Wert >= 200
 Reaction_Notify:
-	mov r0, p1					; take snapshot of port 1
-	mov r1, #1h					; store return value in r1, assume value < 100
+	; take snapshot of port 1
+	mov r0, p1
+	; store return value in r1, assume value < 100
+	mov r1, #1h
 	; compare against < 100
-	mov a, #99d
 	clr c
-	subb a, r0					; subtract value from 99
+	mov a, #99d
+	subb a, r0	; subtract value from 99
 	jnc __Reaction_NotifyEnd	; if no carry, value is <= 99
-	mov r1, #3h					; value is > 99, assume value == 100
+	; value is > 99, assume value == 100
+	mov r1, #3h
 	; compare against 100
 	mov a, #100d
-	xrl a, r0					; xor value with 100
+	xrl a, r0	; xor value with 100
 	jz __Reaction_NotifyEnd		; if zero, value is 100
-	mov r1, #0h					; value is > 100, assume value < 200
+	; value is > 100, assume value < 200
+	mov r1, #0h
 	; compare against < 200
-	mov a, #199d
 	clr c
-	subb a, r0					; subtract value from 199
+	mov a, #199d
+	subb a, r0	; subtract value from 199
 	jnc __Reaction_NotifyEnd	; if no carry, value is <= 199
-	mov r1, #2h					; value is >= 200
+	; value is >= 200
+	mov r1, #2h					
 __Reaction_NotifyEnd:
-	mov p3, r1					; store return value in port 3
+	; store return value in port 3
+	mov p3, r1	
 	ret
 
 ; ============================================================================
@@ -305,38 +490,51 @@ __Reaction_NotifyEnd:
 
 ; initializes the clock
 Clock_Init:
-	mov r0, #40h
-	mov @r0, #00h				; hours
-	mov r0, #41h
-	mov @r0, #00h				; minutes
-	mov r0, #42h
-	mov @r0, #00h				; seconds
-	mov r0, #43h
-	mov @r0, #23d
-	mov r0, #44h
-	mov @r0, #59d
-	mov r0, #45h
-	mov @r0, #59d
+	mov r0, #50h
+	mov @r0, #00h				; *hours = 0
+	mov r0, #51h
+	mov @r0, #00h				; *minutes = 0
+	mov r0, #52h
+	mov @r0, #00h				; *seconds = 0
+	mov r0, #53h
+	mov @r0, #23d	; *maxHours = 23
+	mov r0, #54h
+	mov @r0, #59d	; *maxMinutes = 59
+	mov r0, #55h
+	mov @r0, #59d	; *maxSeconds = 59
 	lcall Clock_ResetTicks
 	ret
 
+; returns true if a second has elapsed.
+; bool Clock_Notify()
 ; if (--clock_tick_counter == 0) 
 ; {
 ; 	  Clock_ResetTicks();
 ;	  Clock_OnEachSecond();
-;  	  Temperature_Notify();
+; 	  return true; 
 ; }
+; return false; 
 Clock_Notify:
-	djnz 46h, __Clock_NotifyEnd
+	mov r0, #00h				; assume false by default
+	djnz 56h, __Clock_NotifyEnd
 	; a second has elapsed
 	lcall Clock_ResetTicks
 	lcall Clock_OnEachSecond
-	lcall Temperature_Notify
+	mov r0, #ffh				; a second has elapsed -> return true
 __Clock_NotifyEnd:
+	; store return address
+	pop 07h
+	pop 06h
+	; push return value
+	push 00h
+	; restore return address
+	push 06h
+	push 07h
 	ret
 
+; resets clock 10ms-tick-counter to 100.
 Clock_ResetTicks:
-	mov 46h, #100d
+	mov 56h, #100d
 	ret
 
 ; Called on each second and handles time set events or increments the seconds
@@ -386,11 +584,11 @@ __Clock_OnEachSecond_SetTime:
 	jz __Clock_OnEachSecond_Normal
 	; selection is valid, set clock
 	; prepare parameters for function call
-	mov a, #40h		; load hours pointer
+	mov a, #50h		; load hours pointer
 	add a, r1					; add selection mask (offset) to pointer
 	mov r3, a					; save pointer to r3
 	push 03h				; push pointer to stack
-	mov a, #43h	; load max hours pointer
+	mov a, #53h	; load max hours pointer
 	add a, r1					; add selection mask (offset) to pointer
 	mov r3, a					; save pointer to r3
 	push 03h				; push pointer to stack
@@ -481,9 +679,9 @@ __Clock_Decrement_NoUnderflow:
 	ret
 
 Clock_IncrementSeconds:
-	mov r0, #42h		; load seconds pointer to r0
+	mov r0, #52h		; load seconds pointer to r0
 	push 00h					; push pointer to stack
-	mov r0, #45h	; load max seconds pointer to stack
+	mov r0, #55h	; load max seconds pointer to stack
 	push 00h					; push pointer to stack
 	lcall Clock_Increment			; call Clock_Increment
 	pop 00h					; pop return value (overflow flag) from stack
@@ -495,9 +693,9 @@ __Clock_IncrementSeconds_NoOverflow:
 	ret
 
 Clock_IncrementMinutes:
-	mov r0, #41h		; load minutes pointer to r0
+	mov r0, #51h		; load minutes pointer to r0
 	push 00h					; push pointer to stack
-	mov r0, #44h	; load max minutes pointer to stack
+	mov r0, #54h	; load max minutes pointer to stack
 	push 00h					; push pointer to stack
 	lcall Clock_Increment			; call Clock_Increment
 	pop 00h					; pop return value (overflow flag) from stack
@@ -509,9 +707,9 @@ __Clock_IncrementMinutes_NoOverflow:
 	ret
 
 Clock_IncrementHours:
-	mov r0, #40h		; load hours pointer to r0
+	mov r0, #50h		; load hours pointer to r0
 	push 00h				; push pointer to stack
-	mov r0, #43h	; load max hours pointer to stack
+	mov r0, #53h	; load max hours pointer to stack
 	push 00h				; push pointer to stack
 	lcall Clock_Increment		; call Clock_Increment
 	pop 00h				; discard return value (there are no days to increment)
@@ -526,33 +724,18 @@ Temperature_Init:
 	lcall Temperature_ResetTicks
 	lcall Temperature_ResetRingBufferPointer
 	; clear average
-	mov 5Bh, #0h
+	mov 63h, #0h
 	; set drift to "steady" for now
-	mov 5Ch, #ffh
+	mov 64h, #ffh
 	; clear temperature buffer (all 0)
-
-	; buffer--; // loop breaks before setting the first element :P
-	; int i = buffer.Length + 1; // loop pre-decrements (add offset from previous line)
-	; do 
-	; {
-	;	  if (--i == 0) break; 
-	; 	  buffer[i] = 0;
-	; } 
-	; while (i > 0);
-	mov r2, #50h 		; load ring buffer base address to r2
-	dec r2									; dumb offset to get the first element
-	mov r1, #10d	; load buffer size to r1 (loop counter)
-	inc r1									; add 1 to r1 (loop counter)
-__Temperature_InitLoopHeader:
-	djnz r1, __Temperature_InitLoop
-	jmp __Temperature_InitLoopBreak
-__Temperature_InitLoop:
-	mov a, r2								; load ring buffer base address to a
-	add a, r1								; add offfset to base address to a
-	mov r0, a								; target address to r0
-	mov @r0, #0								; set element to 0
-	ljmp __Temperature_InitLoopHeader		; loop
-__Temperature_InitLoopBreak:
+	; Memset(baseAddress, size, 0);
+	mov r2, #58h 		; load ring buffer base address to r2
+	push 02h							; push to stack
+	mov r2, #10d	; load buffer size
+	push 02h							; push to stack
+	mov r2, #0								; load target value
+	push 02h							; push to stack
+	lcall MemSet							; call memset
 	ret
 
 ; notifies the temperature sensor that a second has elapsed
@@ -562,7 +745,7 @@ __Temperature_InitLoopBreak:
 ;      Temperature_Measure();
 ; }
 Temperature_Notify:
-	djnz 5Ah, __Temperature_NotifyEnd
+	djnz 62h, __Temperature_NotifyEnd
 	lcall Temperature_ResetTicks
 	lcall Temperature_Measure
 __Temperature_NotifyEnd:
@@ -570,22 +753,22 @@ __Temperature_NotifyEnd:
 
 Temperature_ResetTicks:
 	; reset temperature ticks
-	mov 5Ah, #10d	
+	mov 62h, #10d	
 	ret
 
 ; reads the temperature from port 2.
 Temperature_Measure:
 	mov r2, p2							; get snapshot of current temperature
-	mov r1, 5Dh	; load ring buffer pointer to r1
-	mov a, #50h 		; load ring buffer base address to a
+	mov r1, 65h	; load ring buffer pointer to r1
+	mov a, #58h 		; load ring buffer base address to a
 	add a, r1							; add ring buffer pointer to base address to a
 	mov r0, a							; target address to r0
 	mov a, r2							; load temperature to a
 	mov @r0, a							; store temperature in ring buffer
-	inc 5Dh		; increment ring buffer pointer
+	inc 65h		; increment ring buffer pointer
 	; check if ring buffer pointer is at the end of the buffer
 	mov a, #10d	; load ring buffer size to a
-	xrl a, 5Dh	; compare ring buffer pointer to size
+	xrl a, 65h	; compare ring buffer pointer to size
 	jnz __Temperature_MeasureRingBufferEnd
 	; ring buffer pointer is at the end of the buffer, so reset it to 0
 	lcall Temperature_ResetRingBufferPointer
@@ -595,30 +778,30 @@ __Temperature_MeasureRingBufferEnd:
 
 Temperature_ResetRingBufferPointer:
 	; reset ring buffer pointer to 0
-	mov 5Dh, #0h
+	mov 65h, #0h
 	ret
 
 ; calculates the average of the temperature buffer and determines the temperature drift.
 Temperature_CalculateAverage:
 	; calculate average (sum of all elements in the buffer divided by the number of elements)
 	; sum = 0;
-	mov 5Eh, #0h 		; low byte of sum
-	mov 5Fh, #0h 		; high byte of sum
+	mov 66h, #0h 		; low byte of sum
+	mov 67h, #0h 		; high byte of sum
 	; prepare loop:
 	; for (uint8_t i = 0, uint8_t* p = buffer; i < buffer.Length; i++, p++)
 	mov r1, #0							; uint8_t i = 0;
-	mov r0, #50h		; uint8_t* p = buffer;
+	mov r0, #58h		; uint8_t* p = buffer;
 __Temperature_CalculateAverage_LoopHeader:
 	mov a, #10d	; load ring buffer size to a
 	xrl a, r1							; i < buffer.Length
 	jz __Temperature_CalculateAverage_LoopBreak
 	mov a, @r0							; element = *p;
 	; sum += element;
-	add a, 5Eh			; temp = element + sum.low 
-	mov 5Eh, a			; sum.low = temp
+	add a, 66h			; temp = element + sum.low 
+	mov 66h, a			; sum.low = temp
 	mov a, #0
-	addc a, 5Fh		; temp = carry + sum.high
-	mov 5Fh, a			; sum.high = temp
+	addc a, 67h		; temp = carry + sum.high
+	mov 67h, a			; sum.high = temp
 	inc r1								; i++;
 	inc r0								; p++;
 	jmp __Temperature_CalculateAverage_LoopHeader
@@ -627,7 +810,7 @@ __Temperature_CalculateAverage_LoopBreak:
 	; calculate average (divide sum by number of elements, divide by 10)
 	lcall Temperature_16BitDivideBy10
 	pop 01h						; pop new average value into r1
-	mov r0, 5Bh			; load old average to r0
+	mov r0, 63h			; load old average to r0
 	; calculate temperature drift (old average vs new average)
 	; result goes in r5
 	mov r5, #ffh	; assume steady drift (old average == new average)
@@ -645,8 +828,8 @@ __Temperature_CalculateAverage_LoopBreak:
 __Temperature_CalculateAverage_End:
 	; we know the new average and the new temperature drift.
 	; -> update the average and drift variables
-	mov 5Bh, r1			; update average
-	mov 5Ch, r5			; update drift
+	mov 63h, r1			; update average
+	mov 64h, r5			; update drift
 	ret
 
 ; divides the temperature sum by 10 to produce the average temperature
@@ -656,7 +839,7 @@ Temperature_16BitDivideBy10:
 	; we start by multiplying the sum by 0xcccd.
 	; the 0xcccd magic number was determined by C# compiler optimization.
 	; see: https://sharplab.io/#v2:EYLgxg9gTgpgtADwGwBYA0AXEBDAzgWwB8ABAJgEYBYAKGIGYACMhgYQZoG8aGenGBXAJYA7DAwAiggG4AhAJ7kADAAohohlOwAbfjACU7arwZcjx3sQDsG7boYB6Bkv4BubrwC+ND0A
-	; finally the result is shifted right by 19 bits (thogh we'll do some pointer magic to reduce operations).
+	; finally the result is shifted right by 19 bits (though we'll do some pointer magic to reduce operations).
 	; also we can't multiply by 0xcccd on hardware, so we have to do that manually too oO
 	; all of this is the same as dividing the 16 bit sum by 10.
 	
@@ -715,9 +898,9 @@ Temperature_MultiplySumBy0xcccd:
 	; load uint16_t temperature sum to uint32_t "UINT32_0"
 	; accumulate = sum;
 	; low byte of sum to byte 0 (low byte) of UINT32_0
-	mov 30h, 5Eh
+	mov 30h, 66h
 	; high byte of sum to byte 1 of UINT32_0
-	mov 31h, 5Fh
+	mov 31h, 67h
 	; clear high bytes of UINT32_0
 	mov 32h, #0
 	mov 33h, #0
@@ -791,9 +974,9 @@ Temperature_MultiplySumBy0xcccd:
 ; loads and expands uint16_t temperature sum to uint32_t UINT32_1 register
 Temperature_LoadSumToUINT32_1:
 	; low byte of sum to byte 0 (low byte) of UINT32_1
-	mov 34h, 5Eh
+	mov 34h, 66h
 	; high byte of sum to byte 1 of UINT32_1
-	mov 35h, 5Fh
+	mov 35h, 67h
 	; clear high bytes of UINT32_1
 	mov 36h, #0
 	mov 37h, #0
@@ -821,7 +1004,7 @@ Temperature_LoadSumToUINT32_1:
 ; end procedure
 
 ; our adaptation:
-;void Bubblesort(uint8_t *array, uint16_t length)
+;void bubble_sort(uint8_t* xram, uint16_t length = 0xffff)
 ;{
 ;	uint8_t swapped = true;
 ;	while (swapped != false)
@@ -829,14 +1012,14 @@ Temperature_LoadSumToUINT32_1:
 ;		swapped = false;
 ;		uint16_t i = 1;
 ;		uint16_t j = i - 1;
-;		uint8_t previous = array[j];
+;		uint8_t previous = xram[j];
 ;		while (j != length)
 ;		{
-;			uint8_t current = array[i];
+;			uint8_t current = xram[i];
 ;			if (current - previous < 0)
 ;			{
-;				array[i] = previous;
-;				array[j] = current;
+;				xram[i] = previous;
+;				xram[j] = current;
 ;				swapped = true;
 ;			}
 ;			else
