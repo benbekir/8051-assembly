@@ -4,194 +4,194 @@
 
 ; register macros for direct address mode
 ; register bank 0
-#DEFINE DIRECT_R0		00h
-#DEFINE DIRECT_R1		01h
-#DEFINE DIRECT_R2		02h
-#DEFINE DIRECT_R3		03h
-#DEFINE DIRECT_R4		04h
-#DEFINE DIRECT_R5		05h
-#DEFINE DIRECT_R6		06h
-#DEFINE DIRECT_R7		07h
+#define DIRECT_R0		00h
+#define DIRECT_R1		01h
+#define DIRECT_R2		02h
+#define DIRECT_R3		03h
+#define DIRECT_R4		04h
+#define DIRECT_R5		05h
+#define DIRECT_R6		06h
+#define DIRECT_R7		07h
 
 ; global constants
 ; true xor false => true
-#DEFINE TRUE 			#ffh
-#DEFINE FALSE			#00h
+#define TRUE 			#ffh
+#define FALSE			#00h	
 
 ; ============================================================================
 
 ; Timer 0 in 8-bit autoreload mode.
-#DEFINE TIMER_MODE			#02h
+#define TIMER_MODE			#02h
 ; The overflow frequency of the timer 0 is 4000 Hz, the period duration 0.25 ms.
-#DEFINE TIMER_RELOAD_VALUE	#06h
-#DEFINE TIMER_VALUE			tl0
-#DEFINE TIMER_RANGE			#250d
+#define TIMER_RELOAD_VALUE	#06h
+#define TIMER_VALUE			tl0
+#define TIMER_RANGE			#250d
 
 ; Scheduler
 ; addresses
 ; must be STACK_START = 0x8-1 = 7, because of the stack pointer
-#DEFINE STACK_START			#07h
+#define STACK_START			#07h
 ; universal buffer for 32 bit calculations
-#DEFINE UINT32_00			30h
-#DEFINE UINT32_01			31h
-#DEFINE UINT32_02			32h
-#DEFINE UINT32_03			33h
+#define UINT32_00			30h
+#define UINT32_01			31h
+#define UINT32_02			32h
+#define UINT32_03			33h
 ; second universal buffer for 32 bit calculations
-#DEFINE UINT32_10			34h
-#DEFINE UINT32_11			35h
-#DEFINE UINT32_12			36h
-#DEFINE UINT32_13			37h
+#define UINT32_10			34h
+#define UINT32_11			35h
+#define UINT32_12			36h
+#define UINT32_13			37h
 
-#DEFINE TICK_COUNTER 			38h
+#define TICK_COUNTER 			38h
 
-#DEFINE T0_RESUMED_MICRO_TICKS	39h
-#DEFINE T0_RESUMED_TICKS		3ah
+#define T0_RESUMED_MICRO_TICKS	39h
+#define T0_RESUMED_TICKS		3ah
 
-#DEFINE TX_START_TICKS			3bh
-#DEFINE TX_START_MICRO_TICKS	3ch
+#define TX_START_TICKS			3bh
+#define TX_START_MICRO_TICKS	3ch
 
 ; Task 0 (sorting) monitoring counter LE
-#DEFINE T0_CTR32_0			40h
-#DEFINE T0_CTR32_1			41h
-#DEFINE T0_CTR32_2			42h
-#DEFINE T0_CTR32_3			43h
+#define T0_CTR32_0			40h
+#define T0_CTR32_1			41h
+#define T0_CTR32_2			42h
+#define T0_CTR32_3			43h
 
 ; Task 1 (reaction) monitoring counter LE
-#DEFINE T1_CTR32_0			44h
-#DEFINE T1_CTR32_1			45h
-#DEFINE T1_CTR32_2			46h
-#DEFINE T1_CTR32_3			47h
+#define T1_CTR32_0			44h
+#define T1_CTR32_1			45h
+#define T1_CTR32_2			46h
+#define T1_CTR32_3			47h
 
 ; Task 2 (clock) monitoring counter LE
-#DEFINE T2_CTR32_0			48h
-#DEFINE T2_CTR32_1			49h
-#DEFINE T2_CTR32_2			4ah
-#DEFINE T2_CTR32_3			4bh
+#define T2_CTR32_0			48h
+#define T2_CTR32_1			49h
+#define T2_CTR32_2			4ah
+#define T2_CTR32_3			4bh
 
 ; Task 2 (temperature) monitoring counter LE
-#DEFINE T3_CTR32_0			4ch
-#DEFINE T3_CTR32_1			4dh
-#DEFINE T3_CTR32_2			4eh
-#DEFINE T3_CTR32_3			4fh
+#define T3_CTR32_0			4ch
+#define T3_CTR32_1			4dh
+#define T3_CTR32_2			4eh
+#define T3_CTR32_3			4fh
 
 ; constants
 ; 40 at 4000Hz = 10 ms
-#DEFINE TICK_RESET_VALUE	#40d
+#define TICK_RESET_VALUE	#40d
 ; 32 bit register pointers
-#DEFINE UINT32_0_PTR		#30h
-#DEFINE UINT32_1_PTR		#34h
+#define UINT32_0_PTR		#30h
+#define UINT32_1_PTR		#34h
 ; monitoring counter pointers
-#DEFINE MONITORING_BASE_PTR #40h
-#DEFINE T0_CTR32_PTR		#40h
-#DEFINE T1_CTR32_PTR		#44h
-#DEFINE T2_CTR32_PTR		#48h
-#DEFINE T3_CTR32_PTR		#4ch
+#define MONITORING_BASE_PTR #40h
+#define T0_CTR32_PTR		#40h
+#define T1_CTR32_PTR		#44h
+#define T2_CTR32_PTR		#48h
+#define T3_CTR32_PTR		#4ch
 
 ; ============================================================================
 
 ; SWAP area
-#DEFINE SWAP_A			68h
-#DEFINE SWAP_B			69h
-#DEFINE SWAP_R0			6Ah
-#DEFINE SWAP_R1			6Bh
-#DEFINE SWAP_R2			6Ch
-#DEFINE SWAP_R3			6Dh
-#DEFINE SWAP_R4			6Eh
-#DEFINE SWAP_R5			6Fh
-#DEFINE SWAP_R6			70h
-#DEFINE SWAP_R7			71h
-#DEFINE SWAP_DPL		72h
-#DEFINE SWAP_DPH		73h
+#define SWAP_A			68h
+#define SWAP_B			69h
+#define SWAP_R0			6Ah
+#define SWAP_R1			6Bh
+#define SWAP_R2			6Ch
+#define SWAP_R3			6Dh
+#define SWAP_R4			6Eh
+#define SWAP_R5			6Fh
+#define SWAP_R6			70h
+#define SWAP_R7			71h
+#define SWAP_DPL		72h
+#define SWAP_DPH		73h
 
-#DEFINE SWAP_UINT32_00	74h
-#DEFINE SWAP_UINT32_01	75h
-#DEFINE SWAP_UINT32_02	76h
-#DEFINE SWAP_UINT32_03	77h
+#define SWAP_UINT32_00	74h
+#define SWAP_UINT32_01	75h
+#define SWAP_UINT32_02	76h
+#define SWAP_UINT32_03	77h
 
-#DEFINE SWAP_UINT32_10	78h
-#DEFINE SWAP_UINT32_11	79h
-#DEFINE SWAP_UINT32_12	7Ah
-#DEFINE SWAP_UINT32_13	7Bh
+#define SWAP_UINT32_10	78h
+#define SWAP_UINT32_11	79h
+#define SWAP_UINT32_12	7Ah
+#define SWAP_UINT32_13	7Bh
 
-#DEFINE SWAP_PSW		7Ch
+#define SWAP_PSW		7Ch
 
 ; ============================================================================
 
 ; REACTION
 ; register-based variables
-#DEFINE REACTION_INPUT			p1
-#DEFINE REACTION_TEST_VALUE		r0
-#DEFINE REACTION_OUTPUT			p3
-#DEFINE REACTION_RETURN_VALUE 	r1
-#DEFINE REACTION_CODE_LESS_100	#1h
-#DEFINE REACTION_CODE_100		#3h
-#DEFINE REACTION_CODE_100_200	#0h
-#DEFINE REACTION_CODE_200_PLUS	#2h
+#define REACTION_INPUT			p1
+#define REACTION_TEST_VALUE		r0
+#define REACTION_OUTPUT			p3
+#define REACTION_RETURN_VALUE 	r1
+#define REACTION_CODE_LESS_100	#1h
+#define REACTION_CODE_100		#3h
+#define REACTION_CODE_100_200	#0h
+#define REACTION_CODE_200_PLUS	#2h
 
 ; ============================================================================
 
 ; CLOCK
 ; memory addresses
-#DEFINE CLOCK_HOURS_PTR			#50h
-#DEFINE CLOCK_MINUTES_PTR		#51h
-#DEFINE CLOCK_SECONDS_PTR		#52h
-#DEFINE CLOCK_MAX_HOURS_PTR		#53h
-#DEFINE CLOCK_MAX_MINUTES_PTR	#54h
-#DEFINE CLOCK_MAX_SECONDS_PTR	#55h
-#DEFINE CLOCK_TICK_COUNTER		56h		
+#define CLOCK_HOURS_PTR			#50h
+#define CLOCK_MINUTES_PTR		#51h
+#define CLOCK_SECONDS_PTR		#52h
+#define CLOCK_MAX_HOURS_PTR		#53h
+#define CLOCK_MAX_MINUTES_PTR	#54h
+#define CLOCK_MAX_SECONDS_PTR	#55h
+#define CLOCK_TICK_COUNTER		56h		
 
 ; constants
-#DEFINE CLOCK_MAX_HOURS			#23d
-#DEFINE CLOCK_MAX_MINUTES		#59d
-#DEFINE CLOCK_MAX_SECONDS		#59d
+#define CLOCK_MAX_HOURS			#23d
+#define CLOCK_MAX_MINUTES		#59d
+#define CLOCK_MAX_SECONDS		#59d
 ; 100 at 100Hz = 1s
-#DEFINE CLOCK_TICK_RESET_VALUE	#100d
+#define CLOCK_TICK_RESET_VALUE	#100d
 
 ; ============================================================================
 
 ; TEMPERATURE
 ; memory addresses
-#DEFINE TEMPERATURE_RING_BUFFER		#58h
-#DEFINE TEMPERATURE_TICKS			62h
-#DEFINE TEMPERATURE_AVERAGE			63h
-#DEFINE TEMPERATURE_DRIFT			64h
-#DEFINE TEMPERATURE_RING_BUFFER_PTR	65h
-#DEFINE TEMPERATURE_SUM_LOW			66h
-#DEFINE TEMPERATURE_SUM_HIGH		67h
+#define TEMPERATURE_RING_BUFFER		#58h
+#define TEMPERATURE_TICKS			62h
+#define TEMPERATURE_AVERAGE			63h
+#define TEMPERATURE_DRIFT			64h
+#define TEMPERATURE_RING_BUFFER_PTR	65h
+#define TEMPERATURE_SUM_LOW			66h
+#define TEMPERATURE_SUM_HIGH		67h
 
 ; constants
-#DEFINE TEMPERATURE_RING_BUFFER_SIZE	#10d
+#define TEMPERATURE_RING_BUFFER_SIZE	#10d
 ; 10 at 1Hz = 10s
-#DEFINE TEMPERATURE_TICKS_RESET_VALUE	#10d
-#DEFINE TEMPERATURE_DRIFT_FALLING		#0d
-#DEFINE TEMPERATURE_DRIFT_RISING		#1d
-#DEFINE TEMPERATURE_DRIFT_STEADY		#ffh
+#define TEMPERATURE_TICKS_RESET_VALUE	#10d
+#define TEMPERATURE_DRIFT_FALLING		#0d
+#define TEMPERATURE_DRIFT_RISING		#1d
+#define TEMPERATURE_DRIFT_STEADY		#ffh
 
 ; ============================================================================
 
 ; SORT
 
 ; variable registers
-#DEFINE SORT_SWAPPED	b
-#DEFINE SORT_I_HIGH		r5
-#DEFINE SORT_I_LOW		r4
-#DEFINE SORT_J_HIGH		r3
-#DEFINE SORT_J_LOW		r2
-#DEFINE SORT_CURRENT	r1
-#DEFINE SORT_PREVIOUS	r0
+#define SORT_SWAPPED	b
+#define SORT_I_HIGH		r5
+#define SORT_I_LOW		r4
+#define SORT_J_HIGH		r3
+#define SORT_J_LOW		r2
+#define SORT_CURRENT	r1
+#define SORT_PREVIOUS	r0
 
 ; recursive direct address mode definition for variable i
 ; must be able to move register to register
-#DEFINE SORT_I_LOW_DIRECT DIRECT_R4
-#DEFINE SORT_I_HIGH_DIRECT DIRECT_R5
-#DEFINE SORT_CURRENT_DIRECT DIRECT_R1
+#define SORT_I_LOW_DIRECT DIRECT_R4
+#define SORT_I_HIGH_DIRECT DIRECT_R5
+#define SORT_CURRENT_DIRECT DIRECT_R1
 
 ; ============================================================================
 ; <!-------------------- NO DEFINITIONS BELOW THIS LINE -------------------->
 ; ============================================================================
 
 ; must be up here if we want to preserve the MEMORY SETUP documentation
-; the pre-assembler will strip everything until the first non-comment or #DEFINE
+; the pre-assembler will strip everything until the first non-comment or #define
 ; so you won't see this comment in the generated code :)
 #cpu = 89S8252    ; @12 MHz
 #use LCALL
@@ -218,9 +218,9 @@
 ;  --------------+-------+-------+------+----------------------------------------------
 ;  SWAP 		 | 0x68	 | 0x7f	 | 24   | swap area for execution context
 
-; < 10 ms @12 MHz <=> 0.01 s / cycle @12,000,000Hz @ ~2cycles / instruction 
-; => ~60,000 instructions per interrupt
-; more than enough for basically all tasks to run to completion (except sorting task)
+; < 10 ms @1 MHz (cycles) <=> 0.01 s / cycle @1,000,000Hz @ ~2cycles / instruction 
+; => ~5,000 instructions per interrupt
+; probably more than enough for basically all tasks to run to completion (except sorting task)
 ; => use single stack for all tasks!
 ; expected program flow:
 ; init -> 
@@ -285,11 +285,6 @@ OnTick:
 	lcall EXC_STORE
 	; immediately re-enable timer 0 interrupt (allow interrupting itself for accurate monitoring)
 	; as we NEED to count timer overflows to "allow time to pass" while running all the tasks.
-	; for some reason timer 0 seems to run at 12MHz too which doesn't make sense, because
-	; 250 ticks timer range (reload value = 0x6) @12MHz is 48000Hz, not 4000Hz as the AS51 timer
-	; config tool wants us make to believe.
-	; So either we're running too fast or the simulator's timer is broken as it *should* tick @1MHz.
-	; Still this code works: (only clock seconds may actually be 1/12th of a second) :P
 	lcall RestoreInterruptLogic
 	; stop measurement of T0 task
 	; t0Elapsed += t0ResumedTicks * 250 - (t0ResumedMicroTicks - timerReloadValue)
@@ -379,8 +374,15 @@ MON_Init:
 	push DIRECT_R0				; push to stack
 	lcall MemSet				; call memset
 	ret
-	
-; snap a copy of the current interruptCounter and currentTimerValue. 
+
+; starts a measurement by creating a snapshot of the current timer state
+; locking would be nice here, to prevent interrupts from changing the interruptCounter
+MON_StartMeasurement:
+	mov TX_START_TICKS, TICK_COUNTER		; store interruptCounter
+	mov TX_START_MICRO_TICKS, TIMER_VALUE	; store timerValue
+	ret
+
+; snap a copy of the current interruptCounter and currentTimerValue (timer state). 
 ; locking would be nice here, to prevent interrupts from changing the interruptCounter
 MON_StopMeasurement:
 	mov r0, TIMER_VALUE
@@ -389,20 +391,16 @@ MON_StopMeasurement:
 	pop DIRECT_R7
 	pop DIRECT_R6
 	; push result
-	push DIRECT_R0
-	push DIRECT_R1
+	push DIRECT_R0			; push timerValue
+	push DIRECT_R1			; push interruptCounter
 	; restore return address
 	push DIRECT_R6
 	push DIRECT_R7
 	ret
 
-MON_StartMeasurement:
-	mov TX_START_TICKS, TICK_COUNTER
-	mov TX_START_MICRO_TICKS, TIMER_VALUE
-	ret
-
-; void MON_StoreMeasurement(uint8_t tickCounter, uint8_t timerValue, uint32_t* pCounter, );
-; 	*pCounter += (startTicks - interruptCounter) * 250 + currentTimerValue - startMicroTicks;
+; 
+; void MON_StoreMeasurement(uint8_t timerValue, uint8_t interruptCounter, uint32_t* pCounter);
+; 	*pCounter += (startInterruptCounter - interruptCounter) * 250 + timerValue - startTimerValue;
 MON_StoreMeasurement:
 	; store our return address
 	pop DIRECT_R7
@@ -410,25 +408,25 @@ MON_StoreMeasurement:
 	; pop parameters but leave pCounter on the stack
 	pop DIRECT_R2				; pCounter to r2
 	pop DIRECT_R1				; current interruptCounter to r1
-	pop DIRECT_R0				; current currentTimerValue to r0
+	pop DIRECT_R0				; current timerValue to r0
 	; restore return address
 	push DIRECT_R6
 	push DIRECT_R7
 	; pCounter is first parameter for Add32_Dyn
 	push DIRECT_R2				; push pCounter back to stack
-	; (startTicks - interruptCounter)
+	; (startInterruptCounter - interruptCounter)
 	mov a, TX_START_TICKS
 	clr c
 	subb a, r1					; assume no underflow here :)
-	; (startTicks - interruptCounter) * 250 
+	; (startInterruptCounter - interruptCounter) * 250 
 	mov b, TIMER_RANGE
 	mul ab
-	; (startTicks - interruptCounter) * 250 + currentTimerValue
+	; (startInterruptCounter - interruptCounter) * 250 + timerValue
 	add a, r0
 	xch a, b
 	addc a, #0
 	xch a, b
-	; (startTicks - interruptCounter) * 250 + currentTimerValue - startMicroTicks;
+	; (startInterruptCounter - interruptCounter) * 250 + timerValue - startTimerValue;
 	clr c
 	subb a, TX_START_MICRO_TICKS
 	mov r2, a
@@ -437,7 +435,7 @@ MON_StoreMeasurement:
 	subb a, #0
 	mov r2, a
 	push DIRECT_R2
-	;*pCounter += (startTicks - interruptCounter) * 250 + currentTimerValue - startMicroTicks;
+	;*pCounter += (startInterruptCounter - interruptCounter) * 250 + timerValue - startTimerValue;
 	lcall Add32_Dyn				; 32-bit + 16-bit addition
 	ret
 
