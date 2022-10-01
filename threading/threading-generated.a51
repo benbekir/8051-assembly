@@ -92,20 +92,26 @@ OnTick:
 	; as we NEED to count timer overflows to "allow time to pass" while running all the tasks.
 	lcall RestoreInterruptLogic
 	; stop measurement of T0 task
-	; t0ElapsedTimerTicks += t0ResumedInterrupts * 250 - (t0ResumedTimerValue - timerReloadValue)
+	; t0ElapsedTimerTicks += t0ResumedInterruptCount * 242 - (t0ResumedTimerValue - timerReloadValue) - t0Correction
 	mov r2, #40h
 	push 02h			; push uint32_t* pCounterTask0 to stack
-	; t0ResumedInterrupts * 250 - (t0ResumedTimerValue - timerReloadValue)
+	; t0ResumedInterrupts * 242 - (t0ResumedTimerValue - timerReloadValue)
 	clr c
 	mov a, 39h	; t0ResumedTimerValue to a
 	subb a, #06h		; t0ResumedTimerValue - timerReloadValue
-	mov r1, a						; r1 = (t0ResumedTimerValue - timerReloadValue)
+	mov r1, a						; r1 = (t0ResumedTimerValue - (timerReloadValue + 2))
 	clr c
 	mov a, 3ah	; a = t0ResumedInterrupts
-	mov b, #250d					; b = timerRange (250)
-	mul ab								; t0ResumedInterrupts * 250
+	mov b, #242d	; b = activeCycles (242)
+	mul ab								; t0ResumedInterrupts * 242
 	clr c
-	subb a, r1						; (t0ResumedInterrupts * 250) - (t0ResumedTimerValue - timerReloadValue)
+	subb a, r1						; (t0ResumedInterrupts * 242) - (t0ResumedTimerValue - timerReloadValue)
+	xch a, b 
+	subb a, #0						; handle carry / borrow
+	xch a, b
+	; t0ResumedInterrupts * 242 - (t0ResumedTimerValue - timerReloadValue) - t0Correction
+	clr c
+	subb a, #4d			; apply correction
 	mov r2, a
 	push 02h					; push low elapsed to stack
 	mov a, b
@@ -133,6 +139,7 @@ RestoreInterruptLogic:
 
 TasksNotifyAll:
 	; notify all tasks
+	; <--------- TASK 1 --------->
 	lcall MON_StartMeasurement	; start measurement of reaction task
 	lcall Reaction_Notify
 	lcall MON_StopMeasurement	; stop measurement
@@ -140,21 +147,23 @@ TasksNotifyAll:
 	mov r0, #44h
 	push 00h
 	lcall MON_StoreMeasurement	; store measuement
-
+	; <--------- TASK 2 --------->
 	lcall MON_StartMeasurement	; start measurement of clock task
 	lcall Clock_Notify
-	; return value of Clock (secondElapsed = true|false) to r4 (unused by monitoring)
+	; return value of Clock (secondElapsed = true|false) to r4 (r4 is not used by monitoring)
 	pop 04h
 	lcall MON_StopMeasurement	; stop measurement
 	; load target address of 32bit clock time counter
 	mov r0, #48h
 	push 00h
 	lcall MON_StoreMeasurement	; store measuement
-
+	; <--------- TASK 3 --------->
 	lcall MON_StartMeasurement	; start measurement of temperature task
-	mov a, r4					; load return value of clock & check if 10 seconds elapsed
+	; Clock_Notify returns true (0xff) or false (0x00) depending on whether a second has passed.
+	; these checks were inlined for performance reasons (short path is only 3 cycles).
+	mov a, r4					; load return value of clock
 	jz __TasksNotifyAll_SkipTemperature
-	lcall Temperature_Notify
+	lcall Temperature_Notify	; temperature logic is notified every second.
 __TasksNotifyAll_SkipTemperature:
 	lcall MON_StopMeasurement	; stop measurement
 	; load target address of 32bit temperature time counter
@@ -184,7 +193,7 @@ MON_Init:
 ; locking would be nice here, to prevent interrupts from changing the interruptCounter
 MON_StartMeasurement:
 	mov 3ch, 38h		; store interruptCounter
-	mov 3bh, tl0	; store timerValue
+	mov 3bh, tl0				; store timerValue
 	ret
 
 ; snap a copy of the current interruptCounter and currentTimerValue (timer state). 
@@ -203,9 +212,8 @@ MON_StopMeasurement:
 	push 07h
 	ret
 
-; 
 ; void MON_StoreMeasurement(uint8_t timerValue, uint8_t interruptCounter, uint32_t* pCounter);
-; 	*pCounter += (startInterruptCounter - interruptCounter) * 250 + timerValue - startTimerValue;
+; 	*pCounter += (startInterruptCounter - interruptCounter) * 242 + timerValue - startTimerValue - correctionConstant;
 MON_StoreMeasurement:
 	; store our return address
 	pop 07h
@@ -223,24 +231,34 @@ MON_StoreMeasurement:
 	mov a, 3ch
 	clr c
 	subb a, r1					; assume no underflow here :)
-	; (startInterruptCounter - interruptCounter) * 250 
-	mov b, #250d
+	; explaination: an underflow here would mean more than 10ms have passed for this task
+	; that would mean that something else is totally borked :P
+	; this would also violate the very concept of our scheduling machanism and is something
+	; we're just not gonna talk about :)
+	; (startInterruptCounter - interruptCounter) * 242 
+	mov b, #242d
 	mul ab
-	; (startInterruptCounter - interruptCounter) * 250 + timerValue
+	; (startInterruptCounter - interruptCounter) * 242 + timerValue
 	add a, r0
 	xch a, b
 	addc a, #0
 	xch a, b
-	; (startInterruptCounter - interruptCounter) * 250 + timerValue - startTimerValue;
+	; (startInterruptCounter - interruptCounter) * 242 + timerValue - startTimerValue;
 	clr c
 	subb a, 3bh
+	xch a, b
+	subb a, #0
+	xch a, b
+	; apply correctionConstant
+	clr c
+	subb a, #6d
 	mov r2, a
 	push 02h
 	mov a, b
 	subb a, #0
 	mov r2, a
 	push 02h
-	;*pCounter += (startInterruptCounter - interruptCounter) * 250 + timerValue - startTimerValue;
+	;*pCounter += (startInterruptCounter - interruptCounter) * 242 + timerValue - startTimerValue - correctionConstant;
 	lcall Add32_Dyn				; 32-bit + 16-bit addition
 	ret
 
@@ -986,7 +1004,7 @@ Temperature_LoadSumToUINT32_1:
 ; end procedure
 
 ; our adaptation:
-;void Bubblesort(uint8_t *array, uint16_t length)
+;void bubble_sort(uint8_t* xram, uint16_t length = 0xffff)
 ;{
 ;	uint8_t swapped = true;
 ;	while (swapped != false)
@@ -994,14 +1012,14 @@ Temperature_LoadSumToUINT32_1:
 ;		swapped = false;
 ;		uint16_t i = 1;
 ;		uint16_t j = i - 1;
-;		uint8_t previous = array[j];
+;		uint8_t previous = xram[j];
 ;		while (j != length)
 ;		{
-;			uint8_t current = array[i];
+;			uint8_t current = xram[i];
 ;			if (current - previous < 0)
 ;			{
-;				array[i] = previous;
-;				array[j] = current;
+;				xram[i] = previous;
+;				xram[j] = current;
 ;				swapped = true;
 ;			}
 ;			else
