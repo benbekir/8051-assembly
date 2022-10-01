@@ -23,9 +23,9 @@
 ;  --------------+-------+-------+------+----------------------------------------------
 ;  SWAP 		 | 0x68	 | 0x7f	 | 24   | swap area for execution context
 
-; < 10 ms @12 MHz <=> 0.01 s / cycle @12,000,000Hz @ ~2cycles / instruction 
-; => ~60,000 instructions per interrupt
-; more than enough for basically all tasks to run to completion (except sorting task)
+; < 10 ms @1 MHz (cycles) <=> 0.01 s / cycle @1,000,000Hz @ ~2cycles / instruction 
+; => ~5,000 instructions per interrupt
+; probably more than enough for basically all tasks to run to completion (except sorting task)
 ; => use single stack for all tasks!
 ; expected program flow:
 ; init -> 
@@ -50,6 +50,8 @@ Initialize:
 	; The overflow frequency of the timer 0 is 4000 Hz, the period duration 0.25 ms.
 	mov TH0, #06h
 	; Timer 0 ticks at 1 MHz
+	; reset timer to reload value
+	mov tl0, #06h
 
 	; Interrupts
 	setb ET0    ; Timer 0 Interrupt freigeben
@@ -59,7 +61,7 @@ Initialize:
 	lcall MON_Init
 
 	;reset clock tick counter
-	lcall ResetTicks
+	lcall ResetInterruptCounter
 
 	; initialize clock
 	lcall Clock_Init
@@ -70,16 +72,14 @@ Initialize:
 	; actually + time needed for setb and lcall
 	mov 39h, #06h
 
-	setb TR0    ; Timer 0 l�uft.
+	setb TR0    ; start Timer 0
 	; run sorting task by default
 	lcall Sort_Notify
-
-	end ; <- return adderss on first interrupt
-; * * * Hauptprogramm Ende * * *
+	end
 
 ; if (--interruptCounter == 0) 
 ; {
-; 	  ResetTicks();
+; 	  ResetInterruptCounter();
 ;	  TasksNotifyAll();
 ; }
 OnTick:
@@ -90,46 +90,44 @@ OnTick:
 	lcall EXC_STORE
 	; immediately re-enable timer 0 interrupt (allow interrupting itself for accurate monitoring)
 	; as we NEED to count timer overflows to "allow time to pass" while running all the tasks.
-	; for some reason timer 0 seems to run at 12MHz too which doesn't make sense, because
-	; 250 ticks timer range (reload value = 0x6) @12MHz is 48000Hz, not 4000Hz as the AS51 timer
-	; config tool wants us make to believe.
-	; So either we're running too fast or the simulator's timer is broken as it *should* tick @1MHz.
-	; Still this code works: (only clock seconds may actually be 1/12th of a second) :P
 	lcall RestoreInterruptLogic
 	; stop measurement of T0 task
-	; t0Elapsed += t0ResumedTicks * 250 - (t0ResumedMicroTicks - timerReloadValue)
+	; t0ElapsedTimerTicks += t0ResumedInterrupts * 250 - (t0ResumedTimerValue - timerReloadValue)
 	mov r2, #40h
 	push 02h			; push uint32_t* pCounterTask0 to stack
-	; t0ResumedTicks * 250 - (t0ResumedMicroTicks - timerReloadValue)
+	; t0ResumedInterrupts * 250 - (t0ResumedTimerValue - timerReloadValue)
 	clr c
-	mov a, 39h	; t0ResumedMicroTicks to a
-	subb a, #06h		; a = a - timerReloadValue
-	mov r1, a						; r1 = a
+	mov a, 39h	; t0ResumedTimerValue to a
+	subb a, #06h		; t0ResumedTimerValue - timerReloadValue
+	mov r1, a						; r1 = (t0ResumedTimerValue - timerReloadValue)
 	clr c
-	mov a, 3ah			; a = t0ResumedTicks
-	mov b, #250d				; b = timerRange (250)
-	mul ab
+	mov a, 3ah	; a = t0ResumedInterrupts
+	mov b, #250d					; b = timerRange (250)
+	mul ab								; t0ResumedInterrupts * 250
 	clr c
-	subb a, r1
+	subb a, r1						; (t0ResumedInterrupts * 250) - (t0ResumedTimerValue - timerReloadValue)
 	mov r2, a
 	push 02h					; push low elapsed to stack
 	mov a, b
-	subb a, #0
+	subb a, #0						; handle carry / borrow
 	mov r2, a
 	push 02h					; push high elapsed to stack
-	lcall Add32_Dyn 				; 32 bit + 16 bit addition
+	lcall Add32_Dyn 				; 32 bit + 16 bit addition and store to uint32_t* pCounterTask0
 	; 10 ms elapsed -> let all tasks run
-	lcall ResetTicks
+	lcall ResetInterruptCounter
 	lcall TasksNotifyAll
 	; restore execution context
 	lcall EXC_RESTORE
 	; resume measurement of T0 task
+	; locking would be great here :P
 	mov 3ah, 38h		; snap copy of current tick counter
 	mov 39h, tl0	; snap copy of current timer value
 	ret
 __OnTick_End:
 	reti
 
+; re-enables interrupts by abusing the reti instruction
+; allows Timer 0 to interrupt the interrupt handling logic invoked by a Timer 0 interrupt (:
 RestoreInterruptLogic:
 	reti
 
@@ -165,8 +163,8 @@ __TasksNotifyAll_SkipTemperature:
 	lcall MON_StoreMeasurement	; store measuement
 	ret
 
-; reset ticks
-ResetTicks:
+; reset interrupt counter
+ResetInterruptCounter:
 	mov 38h, #40d
 	ret
 
@@ -181,8 +179,15 @@ MON_Init:
 	push 00h				; push to stack
 	lcall MemSet				; call memset
 	ret
-	
-; snap a copy of the current interruptCounter and currentTimerValue. 
+
+; starts a measurement by creating a snapshot of the current timer state
+; locking would be nice here, to prevent interrupts from changing the interruptCounter
+MON_StartMeasurement:
+	mov 3ch, 38h		; store interruptCounter
+	mov 3bh, tl0	; store timerValue
+	ret
+
+; snap a copy of the current interruptCounter and currentTimerValue (timer state). 
 ; locking would be nice here, to prevent interrupts from changing the interruptCounter
 MON_StopMeasurement:
 	mov r0, tl0
@@ -191,20 +196,16 @@ MON_StopMeasurement:
 	pop 07h
 	pop 06h
 	; push result
-	push 00h
-	push 01h
+	push 00h			; push timerValue
+	push 01h			; push interruptCounter
 	; restore return address
 	push 06h
 	push 07h
 	ret
 
-MON_StartMeasurement:
-	mov 3bh, 38h
-	mov 3ch, tl0
-	ret
-
-; void MON_StoreMeasurement(uint8_t tickCounter, uint8_t timerValue, uint32_t* pCounter, );
-; 	*pCounter += (startTicks - interruptCounter) * 250 + currentTimerValue - startMicroTicks;
+; 
+; void MON_StoreMeasurement(uint8_t timerValue, uint8_t interruptCounter, uint32_t* pCounter);
+; 	*pCounter += (startInterruptCounter - interruptCounter) * 250 + timerValue - startTimerValue;
 MON_StoreMeasurement:
 	; store our return address
 	pop 07h
@@ -212,34 +213,34 @@ MON_StoreMeasurement:
 	; pop parameters but leave pCounter on the stack
 	pop 02h				; pCounter to r2
 	pop 01h				; current interruptCounter to r1
-	pop 00h				; current currentTimerValue to r0
+	pop 00h				; current timerValue to r0
 	; restore return address
 	push 06h
 	push 07h
 	; pCounter is first parameter for Add32_Dyn
 	push 02h				; push pCounter back to stack
-	; (startTicks - interruptCounter)
-	mov a, 3bh
+	; (startInterruptCounter - interruptCounter)
+	mov a, 3ch
 	clr c
 	subb a, r1					; assume no underflow here :)
-	; (startTicks - interruptCounter) * 250 
+	; (startInterruptCounter - interruptCounter) * 250 
 	mov b, #250d
 	mul ab
-	; (startTicks - interruptCounter) * 250 + currentTimerValue
+	; (startInterruptCounter - interruptCounter) * 250 + timerValue
 	add a, r0
 	xch a, b
 	addc a, #0
 	xch a, b
-	; (startTicks - interruptCounter) * 250 + currentTimerValue - startMicroTicks;
+	; (startInterruptCounter - interruptCounter) * 250 + timerValue - startTimerValue;
 	clr c
-	subb a, 3ch
+	subb a, 3bh
 	mov r2, a
 	push 02h
 	mov a, b
 	subb a, #0
 	mov r2, a
 	push 02h
-	;*pCounter += (startTicks - interruptCounter) * 250 + currentTimerValue - startMicroTicks;
+	;*pCounter += (startInterruptCounter - interruptCounter) * 250 + timerValue - startTimerValue;
 	lcall Add32_Dyn				; 32-bit + 16-bit addition
 	ret
 
@@ -320,7 +321,7 @@ Add32:
 	mov 33h, a		; store result in UINT32_0 byte 3
 	ret
 
-; Dynamically adds summand to *pvalue and stores the result in *pvalue;
+; Adds the summand to dynamically provided *pvalue and stores the result in *pvalue;
 ; void Add32_Dyn(uint32_t* pvalue, uint8_t summandLow, uint8_t summandHigh);
 ;     *value += summand;
 Add32_Dyn:
@@ -399,54 +400,6 @@ __ShiftLeft32_End:
 	push 03h			; high byte to stack
 	ret
 
-; modifies a, b, r0-r3
-; void ShiftRight32(uint32_t* value, byte count);
-ShiftRight32:
-	; store our return address
-	pop 03h			; high byte to r3
-	pop 02h			; low byte to r2
-	; now get parameters
-	pop 01h			; count to r1
-	pop 00h			; uint32_t* to r0
-	; this time we need to start shifting at the highest byte
-	mov a, r0 				; uint32_t* to a
-	add a, #3				; add 3 to a to get pointer at highest byte
-	mov r0, a				; store pointer back to r0
-	mov b, a				; create backup of high byte pointer in b
-	; right left
-__ShiftRight32_Loop:
-	mov a, r1				; count to a
-	jz __ShiftRight32_End	; if count == 0, we are done
-	clr c					; clear carry
-	; byte 3
-	mov a, @r0				; get byte 3 (highest byte) of uint32_t value to a
-	rrc a					; rotate right through carry
-	mov @r0, a				; store result in uint32_t value
-	dec r0					; decrement pointer to next byte
-	; byte 2
-	mov a, @r0				; get byte 2 of uint32_t value to a
-	rrc a					; rotate right through carry
-	mov @r0, a				; store result in uint32_t value
-	dec r0					; decrement pointer to next byte
-	; byte 1
-	mov a, @r0				; get byte 1 of uint32_t value to a
-	rrc a					; rotate right through carry
-	mov @r0, a				; store result in uint32_t value
-	dec r0					; decrement pointer to next byte
-	; byte 0
-	mov a, @r0				; get byte 0 of uint32_t value to a
-	rrc a					; rotate right through carry
-	mov @r0, a				; store result in uint32_t value
-	mov r0, b				; restore uint32_t* from b
-	; decrement count and loop
-	dec r1
-	ljmp __ShiftRight32_Loop
-__ShiftRight32_End:
-	; now restore the return address
-	push 02h			; low byte to stack
-	push 03h			; high byte to stack
-	ret
-
 ; void MemSet(void* ptr, uint8_t size, uint8_t value)
 MemSet:
 	; store our return address
@@ -456,6 +409,9 @@ MemSet:
 	pop 02h			; value to r2
 	pop 01h			; size to r1
 	pop 00h			; ptr to r0
+	; restore return address
+	push 06h
+	push 07h
 	; calculate stop address for memset (ptr + size)
 	mov a, r1
 	add a, r0
@@ -469,9 +425,6 @@ __MemSet_Loop:
 	inc r0
 	ljmp __MemSet_Loop
 __MemSet_LoopEnd:
-	; restore return address
-	push 06h
-	push 07h
 	ret
 
 ; ============================================================================
@@ -520,20 +473,19 @@ __Reaction_NotifyEnd:
 ; initializes the clock
 Clock_Init:
 	mov r0, #50h
-	mov @r0, #00h				; hours
+	mov @r0, #00h				; *hours = 0
 	mov r0, #51h
-	mov @r0, #00h				; minutes
+	mov @r0, #00h				; *minutes = 0
 	mov r0, #52h
-	mov @r0, #00h				; seconds
+	mov @r0, #00h				; *seconds = 0
 	mov r0, #53h
-	mov @r0, #23d
+	mov @r0, #23d	; *maxHours = 23
 	mov r0, #54h
-	mov @r0, #59d
+	mov @r0, #59d	; *maxMinutes = 59
 	mov r0, #55h
-	mov @r0, #59d
+	mov @r0, #59d	; *maxSeconds = 59
 	lcall Clock_ResetTicks
 	ret
-
 
 ; returns true if a second has elapsed.
 ; bool Clock_Notify()
@@ -562,6 +514,7 @@ __Clock_NotifyEnd:
 	push 07h
 	ret
 
+; resets clock 10ms-tick-counter to 100.
 Clock_ResetTicks:
 	mov 56h, #100d
 	ret
@@ -868,7 +821,7 @@ Temperature_16BitDivideBy10:
 	; we start by multiplying the sum by 0xcccd.
 	; the 0xcccd magic number was determined by C# compiler optimization.
 	; see: https://sharplab.io/#v2:EYLgxg9gTgpgtADwGwBYA0AXEBDAzgWwB8ABAJgEYBYAKGIGYACMhgYQZoG8aGenGBXAJYA7DAwAiggG4AhAJ7kADAAohohlOwAbfjACU7arwZcjx3sQDsG7boYB6Bkv4BubrwC+ND0A
-	; finally the result is shifted right by 19 bits (thogh we'll do some pointer magic to reduce operations).
+	; finally the result is shifted right by 19 bits (though we'll do some pointer magic to reduce operations).
 	; also we can't multiply by 0xcccd on hardware, so we have to do that manually too oO
 	; all of this is the same as dividing the 16 bit sum by 10.
 	

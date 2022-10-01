@@ -42,13 +42,14 @@
 #define UINT32_12			36h
 #define UINT32_13			37h
 
-#define TICK_COUNTER 			38h
+; counts timer interrupts to keep track of when 10ms have elapsed.
+#define INTERRUPT_COUNT 	38h
 
-#define T0_RESUMED_MICRO_TICKS	39h
-#define T0_RESUMED_TICKS		3ah
+#define T0_RESUMED_TIMER_VALUE		39h
+#define T0_RESUMED_INTERRUPT_COUNT	3ah
 
-#define TX_START_TICKS			3bh
-#define TX_START_MICRO_TICKS	3ch
+#define TX_START_TIMER_VALUE		3bh
+#define TX_START_INTERRUPT_COUNT	3ch
 
 ; Task 0 (sorting) monitoring counter LE
 #define T0_CTR32_0			40h
@@ -76,7 +77,7 @@
 
 ; constants
 ; 40 at 4000Hz = 10 ms
-#define TICK_RESET_VALUE	#40d
+#define INTERRUPT_COUNT_RESET_VALUE	#40d
 ; 32 bit register pointers
 #define UINT32_0_PTR		#30h
 #define UINT32_1_PTR		#34h
@@ -256,16 +257,16 @@ Initialize:
 	lcall MON_Init
 
 	;reset clock tick counter
-	lcall ResetTicks
+	lcall ResetInterruptCounter
 
 	; initialize clock
 	lcall Clock_Init
 	lcall Temperature_Init
 
 	; setup monitoring variables for task 0 (sorting)
-	mov T0_RESUMED_TICKS, TICK_RESET_VALUE
+	mov T0_RESUMED_INTERRUPT_COUNT, INTERRUPT_COUNT_RESET_VALUE
 	; actually + time needed for setb and lcall
-	mov T0_RESUMED_MICRO_TICKS, TIMER_RELOAD_VALUE
+	mov T0_RESUMED_TIMER_VALUE, TIMER_RELOAD_VALUE
 
 	setb TR0    ; start Timer 0
 	; run sorting task by default
@@ -274,55 +275,55 @@ Initialize:
 
 ; if (--interruptCounter == 0) 
 ; {
-; 	  ResetTicks();
+; 	  ResetInterruptCounter();
 ;	  TasksNotifyAll();
 ; }
 OnTick:
 	; T0 overflowed. T0 will be 06h (reset value) here.
 	; can not use registers here, execution context is not yet stored
-	djnz TICK_COUNTER, __OnTick_End
+	djnz INTERRUPT_COUNT, __OnTick_End
 	; store execution context
 	lcall EXC_STORE
 	; immediately re-enable timer 0 interrupt (allow interrupting itself for accurate monitoring)
 	; as we NEED to count timer overflows to "allow time to pass" while running all the tasks.
 	lcall RestoreInterruptLogic
 	; stop measurement of T0 task
-	; t0Elapsed += t0ResumedTicks * 250 - (t0ResumedMicroTicks - timerReloadValue)
+	; t0ElapsedTimerTicks += t0ResumedInterrupts * 250 - (t0ResumedTimerValue - timerReloadValue)
 	mov r2, T0_CTR32_PTR
 	push DIRECT_R2			; push uint32_t* pCounterTask0 to stack
-	; t0ResumedTicks * 250 - (t0ResumedMicroTicks - timerReloadValue)
+	; t0ResumedInterrupts * 250 - (t0ResumedTimerValue - timerReloadValue)
 	clr c
-	mov a, T0_RESUMED_MICRO_TICKS	; t0ResumedMicroTicks to a
-	subb a, TIMER_RELOAD_VALUE		; a = a - timerReloadValue
-	mov r1, a						; r1 = a
+	mov a, T0_RESUMED_TIMER_VALUE	; t0ResumedTimerValue to a
+	subb a, TIMER_RELOAD_VALUE		; t0ResumedTimerValue - timerReloadValue
+	mov r1, a						; r1 = (t0ResumedTimerValue - timerReloadValue)
 	clr c
-	mov a, T0_RESUMED_TICKS			; a = t0ResumedTicks
-	mov b, TIMER_RANGE				; b = timerRange (250)
-	mul ab
+	mov a, T0_RESUMED_INTERRUPT_COUNT	; a = t0ResumedInterrupts
+	mov b, TIMER_RANGE					; b = timerRange (250)
+	mul ab								; t0ResumedInterrupts * 250
 	clr c
-	subb a, r1
+	subb a, r1						; (t0ResumedInterrupts * 250) - (t0ResumedTimerValue - timerReloadValue)
 	mov r2, a
 	push DIRECT_R2					; push low elapsed to stack
 	mov a, b
-	subb a, #0
+	subb a, #0						; handle carry / borrow
 	mov r2, a
 	push DIRECT_R2					; push high elapsed to stack
-	lcall Add32_Dyn 				; 32 bit + 16 bit addition
+	lcall Add32_Dyn 				; 32 bit + 16 bit addition and store to uint32_t* pCounterTask0
 	; 10 ms elapsed -> let all tasks run
-	lcall ResetTicks
+	lcall ResetInterruptCounter
 	lcall TasksNotifyAll
 	; restore execution context
 	lcall EXC_RESTORE
 	; resume measurement of T0 task
 	; locking would be great here :P
-	mov T0_RESUMED_TICKS, TICK_COUNTER		; snap copy of current tick counter
-	mov T0_RESUMED_MICRO_TICKS, TIMER_VALUE	; snap copy of current timer value
+	mov T0_RESUMED_INTERRUPT_COUNT, INTERRUPT_COUNT		; snap copy of current tick counter
+	mov T0_RESUMED_TIMER_VALUE, TIMER_VALUE	; snap copy of current timer value
 	ret
 __OnTick_End:
 	reti
 
-; re-enables interrupts by abusing the reti instruction :)
-; allows Timer 0 to interrupt the interrupt handling logic triggered by a Timer 0 interrupt 
+; re-enables interrupts by abusing the reti instruction
+; allows Timer 0 to interrupt the interrupt handling logic invoked by a Timer 0 interrupt (:
 RestoreInterruptLogic:
 	reti
 
@@ -358,9 +359,9 @@ __TasksNotifyAll_SkipTemperature:
 	lcall MON_StoreMeasurement	; store measuement
 	ret
 
-; reset ticks
-ResetTicks:
-	mov TICK_COUNTER, TICK_RESET_VALUE
+; reset interrupt counter
+ResetInterruptCounter:
+	mov INTERRUPT_COUNT, INTERRUPT_COUNT_RESET_VALUE
 	ret
 
 ; sets all monitoring counters to 0
@@ -378,15 +379,15 @@ MON_Init:
 ; starts a measurement by creating a snapshot of the current timer state
 ; locking would be nice here, to prevent interrupts from changing the interruptCounter
 MON_StartMeasurement:
-	mov TX_START_TICKS, TICK_COUNTER		; store interruptCounter
-	mov TX_START_MICRO_TICKS, TIMER_VALUE	; store timerValue
+	mov TX_START_INTERRUPT_COUNT, INTERRUPT_COUNT		; store interruptCounter
+	mov TX_START_TIMER_VALUE, TIMER_VALUE	; store timerValue
 	ret
 
 ; snap a copy of the current interruptCounter and currentTimerValue (timer state). 
 ; locking would be nice here, to prevent interrupts from changing the interruptCounter
 MON_StopMeasurement:
 	mov r0, TIMER_VALUE
-	mov r1, TICK_COUNTER
+	mov r1, INTERRUPT_COUNT
 	; store return address
 	pop DIRECT_R7
 	pop DIRECT_R6
@@ -415,7 +416,7 @@ MON_StoreMeasurement:
 	; pCounter is first parameter for Add32_Dyn
 	push DIRECT_R2				; push pCounter back to stack
 	; (startInterruptCounter - interruptCounter)
-	mov a, TX_START_TICKS
+	mov a, TX_START_INTERRUPT_COUNT
 	clr c
 	subb a, r1					; assume no underflow here :)
 	; (startInterruptCounter - interruptCounter) * 250 
@@ -428,7 +429,7 @@ MON_StoreMeasurement:
 	xch a, b
 	; (startInterruptCounter - interruptCounter) * 250 + timerValue - startTimerValue;
 	clr c
-	subb a, TX_START_MICRO_TICKS
+	subb a, TX_START_TIMER_VALUE
 	mov r2, a
 	push DIRECT_R2
 	mov a, b
@@ -604,6 +605,9 @@ MemSet:
 	pop DIRECT_R2			; value to r2
 	pop DIRECT_R1			; size to r1
 	pop DIRECT_R0			; ptr to r0
+	; restore return address
+	push DIRECT_R6
+	push DIRECT_R7
 	; calculate stop address for memset (ptr + size)
 	mov a, r1
 	add a, r0
@@ -617,9 +621,6 @@ __MemSet_Loop:
 	inc r0
 	ljmp __MemSet_Loop
 __MemSet_LoopEnd:
-	; restore return address
-	push DIRECT_R6
-	push DIRECT_R7
 	ret
 
 ; ============================================================================
@@ -668,17 +669,17 @@ __Reaction_NotifyEnd:
 ; initializes the clock
 Clock_Init:
 	mov r0, CLOCK_HOURS_PTR
-	mov @r0, #00h				; hours
+	mov @r0, #00h				; *hours = 0
 	mov r0, CLOCK_MINUTES_PTR
-	mov @r0, #00h				; minutes
+	mov @r0, #00h				; *minutes = 0
 	mov r0, CLOCK_SECONDS_PTR
-	mov @r0, #00h				; seconds
+	mov @r0, #00h				; *seconds = 0
 	mov r0, CLOCK_MAX_HOURS_PTR
-	mov @r0, CLOCK_MAX_HOURS
+	mov @r0, CLOCK_MAX_HOURS	; *maxHours = 23
 	mov r0, CLOCK_MAX_MINUTES_PTR
-	mov @r0, CLOCK_MAX_MINUTES
+	mov @r0, CLOCK_MAX_MINUTES	; *maxMinutes = 59
 	mov r0, CLOCK_MAX_SECONDS_PTR
-	mov @r0, CLOCK_MAX_SECONDS
+	mov @r0, CLOCK_MAX_SECONDS	; *maxSeconds = 59
 	lcall Clock_ResetTicks
 	ret
 
@@ -709,6 +710,7 @@ __Clock_NotifyEnd:
 	push DIRECT_R7
 	ret
 
+; resets clock 10ms-tick-counter to 100.
 Clock_ResetTicks:
 	mov CLOCK_TICK_COUNTER, CLOCK_TICK_RESET_VALUE
 	ret
