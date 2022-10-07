@@ -353,14 +353,18 @@ Die Tendenz wird basierend der beiden zuletzt ermittelten Mittelwerte erstellt:
 
 # Monitoring
 
-## 11.1 TODO
+## 11.1
+
+a.) &  b.)
 
 || Software | Hardware | Hybrid |
 |-|-|-|-| 
-Vorteile | TODO
-Nachteile |
-Performanz |
-Genauigkeit |
+Vorteile | - geringer(er) Aufwand <br> - geringe Kosten (keine zusätzliche Hardware notwendig) <br> - hohe Flexibilität, Anpassbarkeit, Iterative Entwicklung möglich <br> - einfache Portabilität für andere 8051 Mikrocontroller | - hohe Performanz (läuft parallel zu den Tasks / geringe Beanspruchung der CPU) <br> - keine Anpassung der Software notwendig (interrupt Routinen, etc) <br> - hohe Genauigkeit, ohne Korrekturen möglich (CPU wird nicht durch Monitoring beansprucht) | - guter Kompromiss zwischen hoher Genauigkeit (Performance-counter der CPU) und flexibler Auswertung der Messergebnisse
+Nachteile | - geringe Performanz (Monitoring verbraucht CPU Zeit) <br> - ohne weitere Maßnahmen: geringe Genauigkeit (Zeit der Messungen selbst muss Kompensiert werden, interrupts während der Messung müssen berücksichtig werden $\implies$ Aufwand steigt mit Genauigkeit) | - hoher Aufwand (Herstellung von Mikroelektronik und vorher Planung mit LogicWorks 😱) <br> - hohe Kosten (Herstellung von Mikroelektronik) <br> - geringe Flexibilität und Portabilität (Neuproduktion statt Bugfixes, starke Bindung an Mikroprozessorarchitektur) | - Erfordert sowohl Hardware, als auch Softwareunterstützung <br> - Erfordert Wissen, sowohl in Softwareentwicklung, als auch in Prozessorarchitektur <br> - Vereinigung der Nachteile von Hard -und Softwaremonitoring, jedoch in abgeschwächter Form.
+Performanz | - | + | o
+$\text{Genauigkeit}_1$ | - | + | o
+
+1: Genauigkeit lässt sich, wie in unserer Implementation, auf Kosten der Performanz eintauschen, z.B. durch Kompensierende Addition / Subtraktion der durch Monitoring verursachten CPU Zeiten. Ohne diese Kompensationen entspricht die Genauigkeit den qualitativen Angaben aus der Tabelle.
 
 ## 11.2 Konzept
 
@@ -372,7 +376,7 @@ Für eine Zeit von 6 Monaten $= \frac{365}{2} = 182.5$ Tage $\implies 182.5 \cdo
 
 #### Interrupt-Unterbrechung
 
-Um das Zählen von Timer 0 Überläufen weiterhin zu ermöglichen, muss in `TaskNotifyAll()` (aufgerufen durch Timer 0 iterrupt) zuerst wieder der Timer 0 interrupt aktiviert werden. Somit kann die Interrupt-Logik selbst wieder durch einen Interrupt unterbrochen werden. Dies geschieht durch den expliziten Aufruf der `RestoreInterruptLogic()` Funktion, die mit der `reti` Instruction zurückspringt:
+Um das Zählen von Timer 0 Überläufen weiterhin zu ermöglichen, muss in `TaskNotifyAll()` (aufgerufen durch Timer 0 interrupt) zuerst wieder der Timer 0 interrupt aktiviert werden. Somit kann die Interrupt-Logik selbst wieder durch einen Interrupt unterbrochen werden. Dies geschieht durch den expliziten Aufruf der `RestoreInterruptLogic()` Funktion, die mit der `reti` Instruction zurückspringt:
 
 ```assembly
 RestoreInterruptLogic:
@@ -470,6 +474,45 @@ Die Simulation wird mit folgenden Werten initialisiert
 2 | `0xFF` | Temperatur (255 °C) | Der Wert ist an dieser Stelle unerheblich, die Ausführungszeit ist konstant.
 3 | `0xFF` | Output vom Reaktions-Task | Unerheblich, wird überschrieben.
 
-Die Simulation wird für ca. eine Stunde (bemessen nach der Clock in der Simulation), bzw ~22 Stunden Echtzeit auf einer `Intel(R) Xeon(R) CPU E3-1230 v3 @3.30GHz` CPU ausgeführt.
+Die Simulation wird für "ca. eine Stunde" (`00:53:27` min) bemessen nach der Clock in der Simulation, bzw ~8 Stunden Echtzeit auf einer `Intel(R) Core(TM) i7-10510U CPU @1.80GHz (2.30 GHz)` CPU ausgeführt.
 
-TODO :/
+#### Ergebnisse
+
+IRAM nach Ende der Simulation: die Clock Stunden, Minuten, Sekunden befinden sich an Addressen `0x50`,`0x51`,`0x52`.
+![](./assets/simulation-result-iram.png)
+
+Dies resultiert in folgenden Ergebnissen:
+
+| Task | Task-ID | Zeit $t_i$ (in $\mu s$) | Prozentualer Anteil (Virtuell) $P_i = \frac{t_i}{T}$ | Prozentualer Anteil (Real) $\mathfrak{P}_i = \frac{t_i}{\mathfrak{T}}$
+|- |-|-:|-|-|
+| Bubblesort | 0 | 2923640295 | 99.444115% | 91.164319%
+| Reaktion | 1 | 8338200 | 0.283614% | 0.26%
+| Clock | 2 | 6284780 | 0.213769% | 0.195971%
+| Temperatur | 3 | 1719940 | 0.058502% | 0.053631%
+| **Total** | $T := \sum_{i = 0}^3 t_i$ | 2939983215 | 100% | 91.673921%
+| Scheduler/ Monitoring Overhead | S | 267017424 | 0% | 8.32608%
+
+Bei $t_i$ handelt es sich um die gemessenen und akkumulierten Mikrosekunden von Task $i$ mit $0 \leq i \leq 3$.
+
+Hierbei entspricht $P_i$ dem prozentualen Anteil von Task $i$ an der Gesamtlaufzeit aller Tasks. $\mathfrak{P}_i$ hingegen entspricht dem tatsächlichen prozentualen Anteil an der gesamten CPU Zeit während der Simulation.
+
+Zur Berechnung von $\mathfrak{P}_i$ wird die totale verstrichene Zeit $\mathfrak{T}$ seit Start der Simulation benötigt (inklusive Scheduling und Monitoring). Diese lässt sich wie folgt ermitteln:
+
+![](./assets/simulation-result-total-time.png)
+
+$\mathfrak{T} = $ `(<min> * 60 + <sec>) * 1e6 + <interrupts> * 250 + ticks`
+$\mathfrak{T} = (53m \cdot 60 + 27s) \cdot 10^6 + 2 \cdot 250\mu s + 139\mu s = 3207000639\mu s$
+
+Die vergangenen Minuten und Sekunden ergeben sich hierbei aus den Addressen der Clock (`0x50,...,0x52`) mit Wert `00:53:27`, durch die Differenz mit der Startzeit `23:30:00`. Weiterhin lassen sich die aus den vergangenen Interrupts (Addresse `0x38`), heruntergezählt von `0x28` (`0x28 - 0x26 = 2`) und multipliziert mit dem Zählerintervall `256 - 6` (Reloadwert) und addiert mit dem aktuellen Zählerstand `0x91 - 6` (Reloadwert) die verstrichenen Mikrosekunden seit der letzten Sekunde ermitteln.
+
+#### Fazit
+
+Somit hat der Sortier-Task ca `91.164319%` der gesamten CPU Zeit beansprucht, wodurch die Forderung nach möglichst viel Prozessorzeit für den Sortier-Task umgesetzt wurde. 
+
+Die zweitlängste aktive CPU Zeit (der Client-Tasks) hat der Reaktionstask mit `0.26%` der Prozessorzeit beansprucht, was zum einen überrascht, da die Reaktions-Subroutine den kürzesten Pfad aller Tasks aufweist, andererseits ist das Ergebnis nachvollziebar, da der Reaktionstask 100 mal häufiger als die Clock und 1000 mal öfter als das Thermometer ausgeführt wird. 
+
+Die Clock selbst beansprucht mit `0.195971%` die drittmeiste Zeit der CPU, und kommt somit fast and die aktive CPU zeit des Reaktionstasks heran, obwohl die Clock 100 mal seltener aufgerufen wird. Dieser geringe Laufzeitunterschied lässt sich auf den deutlich längeren Längsten Pfad durch die Clock subroutine erklären. Zudem gibt die Clock alle 10ms einen Boolean-Wert über den Stack zurück (sichern und laden der Return-Addresse), welcher angibt, ob eine Sekunde vergangen ist, sodass konditional der Thermometer Task aufgerufen werden kann. 
+
+Obwohl der Thermometertask bei weitem den längsten Pfad aufweist (16 bit Aufsummierung der Messwerte, gefolgt von 16 bit Division durch 10 in Software) werden nur ca. `0.053631%` der CPU Zeit benötigt. Dies liegt zum einen durch einen Inline-Check ob eine Sekunde vergangen ist (Somit wird `Temperature_Notify()` nur jede Sekunde aufgerufen, vs. alle 10 ms bei der Clock mit `Clock_Notify()`) und zum anderen daran, dass nur alle 10 Sekunden diese aufwendigen Mess-und Divisionsvorgänge ausgeführt werden.
+
+Der Scheduler (und das Monitoring) zusammen beanspruchen ca `8.32608%` der gesamten CPU Zeit, was zu erst viel erscheinen mag, sich aber durch das Sichern und Wiederherstellen des Execution Contexts (sichern der Register und von Programm Status Wort) (`EXC_STORE`, `EXC_RESTORE`) alle 10 ms vor und nach der Interruptbehandlung, sowie durch den relativ aufwändigen Korrektur/Bereinigungsprozess der Messwerte des Monitorings erklären lässt.
