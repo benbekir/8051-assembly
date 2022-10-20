@@ -1,10 +1,3 @@
----
-output: pdf_document
-title: "Gruppe 4: Task Scheduler und Monitoring in 8051 Assembly"
-export_on_save:
-  prince: true
----
-
 # Gruppe 4: Task Scheduler und Monitoring in 8051 Assembly
 
 *von Ben Bekir Ertugrul, Frederik Höft, Patrik Schottelius und Manuele Waldheim*
