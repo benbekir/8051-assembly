@@ -85,7 +85,7 @@ INIT->SORT                                                     --> SORT
 | `SWAP_A` | 68h | Swap space für Register `a` bei Interruptbehandlung (`TasksNofityAll()`) |
 | `SWAP_B` | 69h | Swap space für Register `b` bei Interruptbehandlung (`TasksNofityAll()`) |
 | `SWAP_R[0-7]` | 6Ah-71h | Swap space für Register `r0-r7` |
-| `SWAP_DP[L|H]` | 72h-73h | Swap space für `dptr (dpl, dph)` |
+| `SWAP_DP[L/H]` | 72h-73h | Swap space für `dptr (dpl, dph)` |
 | `SWAP_UINT32_0[0-3]` | 74h-77h | Swap space für `UINT32_0` 32 bit register |
 | `SWAP_UINT32_1[0-3]` | 78h-7Bh | Swap space für `UINT32_1` 32 bit register |
 | `SWAP_PSW` | 7Ch | Swap space für program status word (`psw`) |
@@ -154,14 +154,15 @@ Der Sortier-task greift nicht auf den internen Speicher (IRAM) zu (ausgenommen `
 | `SORT_J_HIGH` | `r3` | index des vorherigen Elements (high byte) |
 | `SORT_I_LOW` | `r4` | index des aktuellen Elements (low byte) |
 | `SORT_I_HIGH` | `r5` | index des aktuellen Elements (high byte) |
-| `SORT_CURRENT_DIRECT` | `DIRECT_R1` | direkter zugriff auf register r1 (addresse `01h`) |
+| `SORT_CURRE ![ NT_DIRECT` | `DIRECT_R1` | direkter zugriff auf register r1 (addresse `01h`) |
 | `SORT_I_LOW_DIRECT` | `DIRECT_R4` | direkter zugriff auf register r4 (addresse `04h`) |
 | `SORT_I_HIGH_DIRECT` | `DIRECT_R5` | direkter zugriff auf register r5 (addresse `05h`) |
 
 ### Tests
 
 Um die Funktion nachzuweisen, wurde ein Array mit 256 Werten sortiert.
-![](assets\xram-sorted.png)
+
+![](assets/xram-sorted.png)
 
 ## Task 1: Reaction-Task (R-Task)
 
@@ -472,6 +473,7 @@ Die Simulation wird für "ca. eine Stunde" (`00:53:27` min) bemessen nach der Cl
 #### Ergebnisse
 
 IRAM nach Ende der Simulation: die Clock Stunden, Minuten, Sekunden befinden sich an Addressen `0x50`,`0x51`,`0x52`.
+
 ![](./assets/simulation-result-iram.png)
 
 Dies resultiert in folgenden Ergebnissen:
